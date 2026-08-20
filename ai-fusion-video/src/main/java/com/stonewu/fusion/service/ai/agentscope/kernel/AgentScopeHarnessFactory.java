@@ -5,9 +5,12 @@ import com.stonewu.fusion.service.ai.agentscope.state.AgentScopeShutdownRecovery
 import com.stonewu.fusion.service.ai.agentscope.state.StateStoreFailureGuard;
 import com.stonewu.fusion.service.ai.agentscope.state.StateStoreGuardedChatModel;
 import com.stonewu.fusion.service.ai.agentscope.skill.AgentScopeSkillRegistry;
+import com.stonewu.fusion.service.ai.agentscope.skill.AgentUserSkillService;
+import com.stonewu.fusion.service.ai.agentscope.skill.UserSkillRepository;
 import com.stonewu.fusion.service.ai.agentscope.workspace.AgentWorkspaceBaseStore;
 import com.stonewu.fusion.service.ai.agentscope.permission.AgentToolPermissionPolicy;
 import com.stonewu.fusion.service.ai.agentscope.permission.ToolExecutionMode;
+import io.agentscope.core.skill.repository.AgentSkillRepository;
 import io.agentscope.core.state.AgentStateStore;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.core.tool.ToolkitConfig;
@@ -20,7 +23,9 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
@@ -35,6 +40,7 @@ public final class AgentScopeHarnessFactory {
     private final AgentScopeShutdownRecoveryBridge shutdownRecoveryBridge;
     private final AgentScopeSkillRegistry skillRegistry;
     private final BaseStore workspaceStore;
+    private final AgentUserSkillService userSkillService;
 
     @Autowired
     public AgentScopeHarnessFactory(
@@ -44,7 +50,8 @@ public final class AgentScopeHarnessFactory {
             StateStoreFailureGuard failures,
             AgentScopeShutdownRecoveryBridge shutdownRecoveryBridge,
             ObjectProvider<AgentScopeSkillRegistry> skillRegistries,
-            ObjectProvider<AgentWorkspaceBaseStore> workspaceStores) {
+            ObjectProvider<AgentWorkspaceBaseStore> workspaceStores,
+            AgentUserSkillService userSkillService) {
         this(
                 modelFactory,
                 toolRegistry,
@@ -52,7 +59,8 @@ public final class AgentScopeHarnessFactory {
                 failures,
                 shutdownRecoveryBridge,
                 skillRegistries.getIfAvailable(AgentScopeHarnessFactory::disabledSkillRegistry),
-                workspaceStores.getIfAvailable());
+                workspaceStores.getIfAvailable(),
+                userSkillService);
     }
 
     AgentScopeHarnessFactory(
@@ -63,7 +71,7 @@ public final class AgentScopeHarnessFactory {
             AgentScopeShutdownRecoveryBridge shutdownRecoveryBridge,
             AgentScopeSkillRegistry skillRegistry) {
         this(modelFactory, toolRegistry, stateStore, failures, shutdownRecoveryBridge,
-                skillRegistry, null);
+                skillRegistry, null, null);
     }
 
     AgentScopeHarnessFactory(
@@ -74,6 +82,19 @@ public final class AgentScopeHarnessFactory {
             AgentScopeShutdownRecoveryBridge shutdownRecoveryBridge,
             AgentScopeSkillRegistry skillRegistry,
             BaseStore workspaceStore) {
+        this(modelFactory, toolRegistry, stateStore, failures, shutdownRecoveryBridge,
+                skillRegistry, workspaceStore, null);
+    }
+
+    AgentScopeHarnessFactory(
+            AgentKernelModelFactory modelFactory,
+            AgentKernelToolRegistry toolRegistry,
+            AgentStateStore stateStore,
+            StateStoreFailureGuard failures,
+            AgentScopeShutdownRecoveryBridge shutdownRecoveryBridge,
+            AgentScopeSkillRegistry skillRegistry,
+            BaseStore workspaceStore,
+            AgentUserSkillService userSkillService) {
         this.modelFactory = Objects.requireNonNull(modelFactory, "modelFactory must not be null");
         this.toolRegistry = Objects.requireNonNull(toolRegistry, "toolRegistry must not be null");
         this.stateStore = Objects.requireNonNull(stateStore, "stateStore must not be null");
@@ -83,6 +104,7 @@ public final class AgentScopeHarnessFactory {
         this.skillRegistry = Objects.requireNonNull(
                 skillRegistry, "skillRegistry must not be null");
         this.workspaceStore = workspaceStore;
+        this.userSkillService = userSkillService;
     }
 
     public AgentScopeHarnessFactory(
@@ -98,6 +120,7 @@ public final class AgentScopeHarnessFactory {
                 failures,
                 shutdownRecoveryBridge,
                 disabledSkillRegistry(),
+                null,
                 null);
     }
 
@@ -151,7 +174,15 @@ public final class AgentScopeHarnessFactory {
                 builder.disableDefaultWorkspaceSkills();
             }
             if (skillRegistry.enabled()) {
-                builder.skillRepositories(skillRegistry.repositories());
+                List<AgentSkillRepository> repositories =
+                        new ArrayList<>(skillRegistry.repositories());
+                Long ownerId = AgentKernelSpecFactory.ownerUserId(spec);
+                if (ownerId != null && userSkillService != null) {
+                    // 用户 Skill 存在聊天助手 namespace 下，其他 agent 的 workspace 扫描不到；
+                    // 按用户挂一个只读仓库，让 load_skill_through_path 等工具的枚举包含全部用户 Skill。
+                    repositories.add(new UserSkillRepository(userSkillService, ownerId));
+                }
+                builder.skillRepositories(repositories);
             }
             if (workspaceStore != null || skillRegistry.enabled()) {
                 builder.skillsEnabled(true);

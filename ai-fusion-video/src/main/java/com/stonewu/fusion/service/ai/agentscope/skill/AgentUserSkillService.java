@@ -148,6 +148,22 @@ public class AgentUserSkillService {
         deleteDirectory(userId, requireLookupName(name));
     }
 
+    /**
+     * 返回 Skill 的资源文件（references/ 等，相对路径 → UTF-8 内容），
+     * 供 load_skill_through_path 等库工具加载 SKILL.md 之外的资源。
+     */
+    public Map<String, String> skillResources(long userId, String name) {
+        Map<String, byte[]> files = readDirectoryFiles(userId, requireLookupName(name));
+        Map<String, String> resources = new LinkedHashMap<>();
+        files.forEach((path, bytes) -> {
+            if ("SKILL.md".equals(path)) {
+                return;
+            }
+            resources.put(path, new String(bytes, StandardCharsets.UTF_8));
+        });
+        return resources;
+    }
+
     boolean exists(long userId, String name) {
         return workspaceStore.get(namespace(userId), skillKey(name)) != null;
     }

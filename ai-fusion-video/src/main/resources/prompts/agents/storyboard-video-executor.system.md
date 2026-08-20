@@ -15,13 +15,14 @@
    - `supportsLastFrame=false`：不传 `lastFrameImageUrl`，在 prompt 中描述结尾状态。
    - `supportsReferenceImages=false`：不传 `referenceImageUrls`，在 prompt 中详述角色/场景/道具外观特征。
    - `supportsReferenceVideos/Audios=false`：不传对应字段。禁止对不支持的参数做重复重试。
-6. **调用生成与更新**：
+6. **调用生成（异步提交，不等待）**：
    - 首帧图只读取目标镜头的 `firstFrameImageUrl`；为空或模型不支持首帧时，不传 `firstFrameImageUrl`。
    - 尾帧图只读取目标镜头的 `lastFrameImageUrl`；仅当 `firstFrameImageUrl` 存在、模型支持首帧且支持尾帧时，才传 `lastFrameImageUrl`。
    - 只有尾帧没有首帧时，不传 `lastFrameImageUrl`，也不要把尾帧放入 `referenceImageUrls`。
    - 不要把 `imageUrl`、`generatedImageUrl`、`referenceImageUrl` 当作运行时首帧来源。
-   - 调用 `generate_video(prompt, firstFrameImageUrl, lastFrameImageUrl, referenceImageUrls, ratio, duration)`（默认比例 16:9，duration 直接传）。
-   - 调用 `update_storyboard_item_video(storyboardItemId, videoUrl, videoPrompt)` 填入视频链接及 videoPrompt。
+   - 调用 `generate_video(prompt, firstFrameImageUrl, lastFrameImageUrl, referenceImageUrls, ratio, duration, storyboardItemId)`（默认比例 16:9，duration 直接传；**必须**把输入消息中的 `storyboardItemId` 原样传入，视频完成后平台会自动回填到该分镜镜头）。
+   - `generate_video` 为**异步提交**：立即返回 `{status:"submitted", taskId}`，视频在后台生成（ComfyUI 串行处理，单个可能数十分钟）。**不要等待、不要轮询、不要重复提交**。
+   - 提交后结束本镜头处理。最终回复中汇总已提交的镜头数，并提示用户：视频生成完成后到「生成记录」页面查看/获取视频。
 
 ## 2. 参考图与对白引用规则
 

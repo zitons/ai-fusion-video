@@ -12,6 +12,7 @@ import com.stonewu.fusion.service.ai.agentscope.AgentScopeModelFactory;
 import com.stonewu.fusion.service.ai.agentscope.context.ProjectContext;
 import com.stonewu.fusion.service.ai.agentscope.mcp.AgentScopeMcpRegistry;
 import com.stonewu.fusion.service.ai.agentscope.permission.ToolExecutionMode;
+import com.stonewu.fusion.service.ai.agentscope.skill.AgentUserSkillService;
 import com.stonewu.fusion.service.ai.agentscope.tool.AgentScopeToolSchema;
 import com.stonewu.fusion.service.ai.run.kernel.AgentKernelSnapshotPayload;
 import com.stonewu.fusion.service.ai.run.kernel.ToolManifestSnapshot;
@@ -35,12 +36,15 @@ public final class AgentKernelSpecFactory {
     public static final String OWNER_USER_ID_VARIABLE = "agentWorkspaceUserId";
     public static final String MCP_CONFIG_FINGERPRINT_VARIABLE = "agentMcpConfigFingerprint";
     public static final String TOOL_EXECUTION_MODE_VARIABLE = "agentToolExecutionMode";
+    /** 子 Agent 系统提示词中注入用户 Skill 的总长度上限（与聊天主动引用一致）。 */
+    private static final int MAX_INJECTED_SKILL_CHARS = 64 * 1024;
     private final AiAgentService agentService;
     private final AiToolConfigService toolConfigService;
     private final AgentScopeModelFactory modelFactory;
     private final AgentScopeV2Properties properties;
     private final ObjectMapper objectMapper;
     private final AgentScopeMcpRegistry mcpRegistry;
+    private final AgentUserSkillService userSkillService;
 
     @Autowired
     public AgentKernelSpecFactory(
@@ -49,7 +53,8 @@ public final class AgentKernelSpecFactory {
             AgentScopeModelFactory modelFactory,
             AgentScopeV2Properties properties,
             ObjectMapper objectMapper,
-            AgentScopeMcpRegistry mcpRegistry) {
+            AgentScopeMcpRegistry mcpRegistry,
+            AgentUserSkillService userSkillService) {
         this.agentService = Objects.requireNonNull(agentService, "agentService must not be null");
         this.toolConfigService = Objects.requireNonNull(
                 toolConfigService, "toolConfigService must not be null");
@@ -57,6 +62,7 @@ public final class AgentKernelSpecFactory {
         this.properties = Objects.requireNonNull(properties, "properties must not be null");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
         this.mcpRegistry = Objects.requireNonNull(mcpRegistry, "mcpRegistry must not be null");
+        this.userSkillService = userSkillService;
     }
 
     public AgentKernelSpecFactory(
@@ -71,7 +77,8 @@ public final class AgentKernelSpecFactory {
                 modelFactory,
                 properties,
                 objectMapper,
-                new AgentScopeMcpRegistry(properties, objectMapper));
+                new AgentScopeMcpRegistry(properties, objectMapper),
+                null);
     }
 
     public AgentKernelSpec createRoot(AiChatReqVO request, AiModel model, String systemPrompt) {
@@ -148,6 +155,10 @@ public final class AgentKernelSpecFactory {
         if (agentName == null) {
             agentName = requireText(definition.getName(), "subAgent.name");
         }
+        Long ownerId = ownerUserId(parent);
+        if (ownerId != null) {
+            prompt = appendUserSkills(prompt, ownerId);
+        }
         return create(
                 parent.model(),
                 childType,
@@ -157,6 +168,42 @@ public final class AgentKernelSpecFactory {
                 variables,
                 tools,
                 parent.key().modelConfigFingerprint());
+    }
+
+    /**
+     * 将当前用户的全部 Skill 注入子 Agent 系统提示词。
+     * 平台 Skill 激活是显式引用制（enabledSkills），分镜等 pipeline 子 Agent 没有
+     * 引用入口，因此这里把全部用户 Skill 直接拼入 prompt，让子 Agent 在相关任务中
+     * 必须遵循对应 Skill 的正文要求；与任务无关的 Skill 由模型自行忽略。
+     */
+    private String appendUserSkills(String prompt, long userId) {
+        if (userSkillService == null) {
+            return prompt;
+        }
+        List<AgentUserSkillService.UserSkill> skills = userSkillService.list(userId);
+        if (skills.isEmpty()) {
+            return prompt;
+        }
+        StringBuilder block = new StringBuilder(
+                "\n\n## 已注入的用户 Skills\n"
+                        + "以下为当前用户的全部 Skill（正文已完整给出，无需再通过 load_skill_through_path 等工具加载）。"
+                        + "若当前任务与某个 Skill 相关，该 Skill 的要求**优先于**本提示词中的通用规则，必须严格遵循；"
+                        + "与本任务无关的 Skill 直接忽略。\n");
+        int total = 0;
+        for (AgentUserSkillService.UserSkill skill : skills) {
+            String content = skill.content();
+            if (total + content.length() > MAX_INJECTED_SKILL_CHARS) {
+                break;
+            }
+            block.append("\n### Skill: ").append(skill.name())
+                    .append("\n描述：").append(skill.description())
+                    .append("\n\n").append(content).append('\n');
+            total += content.length();
+        }
+        if (total == 0) {
+            return prompt;
+        }
+        return prompt + block;
     }
 
     /** Rebuilds the exact persisted whitelist after verifying every live tool contract. */
