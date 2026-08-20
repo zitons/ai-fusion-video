@@ -83,8 +83,9 @@ public class FileUploadController {
         }
 
         String contentType = file.getContentType();
-        if (contentType == null || !ALLOWED_IMAGE_TYPES.contains(contentType.toLowerCase())) {
-            throw new BusinessException("仅支持图片格式：PNG, JPEG, WebP, GIF");
+        String normalized = normalizeContentType(contentType);
+        if (normalized == null || !ASSISTANT_UPLOAD_TYPES.containsKey(normalized)) {
+            throw new BusinessException("不支持的文件格式：" + contentType);
         }
 
         try {
