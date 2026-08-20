@@ -156,6 +156,7 @@ public class ComfyUiInputResourceService {
             }
             String contentType = response.body().contentType().toString()
                     .split(";", 2)[0].toLowerCase(Locale.ROOT);
+            contentType = resolveAudioContentType(contentType, value);
             requireAudioContentType(contentType);
             return new AudioBytes(bytes, contentType);
         } catch (IOException e) {
@@ -164,13 +165,31 @@ public class ComfyUiInputResourceService {
         }
     }
 
+    /** Content-Type 缺失或为 octet-stream 时，按 URL 扩展名推断音频类型。 */
+    private String resolveAudioContentType(String contentType, String url) {
+        String ct = contentType == null ? "" : contentType.toLowerCase(Locale.ROOT);
+        if (ct.startsWith("audio/")) {
+            return ct;
+        }
+        String lower = url == null ? "" : url.toLowerCase(Locale.ROOT);
+        if (lower.endsWith(".mp3")) return "audio/mpeg";
+        if (lower.endsWith(".wav")) return "audio/wav";
+        if (lower.endsWith(".m4a")) return "audio/mp4";
+        if (lower.endsWith(".aac")) return "audio/aac";
+        if (lower.endsWith(".ogg")) return "audio/ogg";
+        if (lower.endsWith(".flac")) return "audio/flac";
+        if (lower.endsWith(".amr")) return "audio/amr";
+        if (lower.endsWith(".opus")) return "audio/opus";
+        if (lower.endsWith(".wma")) return "audio/x-ms-wma";
+        if (lower.endsWith(".weba")) return "audio/webm";
+        if (lower.endsWith(".mp4")) return "audio/mp4";
+        return ct;
+    }
+
     private void requireAudioContentType(String contentType) {
-        if (contentType == null || !switch (contentType.toLowerCase(Locale.ROOT)) {
-            case "audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/m4a",
-                 "audio/mp4", "audio/ogg", "audio/aac", "audio/flac", "audio/x-m4a" -> true;
-            default -> false;
-        }) {
-            throw new BusinessException(400, "ComfyUI 输入文件不是受支持的音频");
+        String ct = contentType == null ? "" : contentType.toLowerCase(Locale.ROOT);
+        if (!ct.startsWith("audio/")) {
+            throw new BusinessException(400, "ComfyUI 输入文件不是受支持的音频: " + contentType);
         }
     }
 
@@ -282,7 +301,17 @@ public class ComfyUiInputResourceService {
             case "image/gif" -> "gif";
             case "image/bmp" -> "bmp";
             case "image/tiff" -> "tiff";
-            default -> throw new BusinessException(400, "ComfyUI 输入文件不是受支持的栅格图片");
+            case "audio/mpeg", "audio/mp3" -> "mp3";
+            case "audio/wav", "audio/x-wav" -> "wav";
+            case "audio/mp4", "audio/m4a", "audio/x-m4a" -> "m4a";
+            case "audio/aac" -> "aac";
+            case "audio/ogg" -> "ogg";
+            case "audio/flac" -> "flac";
+            case "audio/amr" -> "amr";
+            case "audio/opus" -> "opus";
+            case "audio/x-ms-wma" -> "wma";
+            case "audio/webm" -> "weba";
+            default -> throw new BusinessException(400, "ComfyUI 输入文件类型不支持: " + contentType);
         };
     }
 
