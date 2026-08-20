@@ -13,6 +13,7 @@
 4. **识别对白**：按规则将镜头中的 `dialogue` 转写为对白格式，融入 prompt。
 5. **镜头模式与模型选择**：调用 `get_generation_model_capabilities(modelType=video)` 获取 `videoModels` 清单，按镜头模式选择模型并记录其 `modelId`（后续 generate_video **必须**传入）：
    - **ref2v（多图参考 + 音色）**：选择 `supportsReferenceImages` 且 `supportsReferenceAudios` 为 true 的模型；`isDefault` 优先。
+     - **兜底**：若目标镜头**没有可用资产参考图**（characterRefs/propRefs/sceneRef 均无 imageUrl），ref2v 模式不可硬跑（参考位会落到工作流默认图），应改用 fl2v 模型走首尾帧；若首尾帧也没有，用文本描述并明确告知用户先补资产图。
    - **fl2v（首尾帧 / 一镜到底）**：选择 `supportsFirstFrame`（且 `supportsLastFrame`）为 true 的模型；`isDefault` 优先。
    - 对所选模型做参数裁剪：不支持的字段一律不传，禁止对不支持的参数重复重试。
 6. **调用生成（按模式适配，异步提交，不等待）**：
