@@ -1,0 +1,255 @@
+{
+  "1": {
+    "inputs": {
+      "unet_name": "minimax_h3_fl2va_int8_convrot.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "UNet加载器"
+    }
+  },
+  "2": {
+    "inputs": {
+      "clip_name": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+      "type": "minimax",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "加载CLIP"
+    }
+  },
+  "3": {
+    "inputs": {
+      "vae_name": "minimax_h3_video_vae_fp16.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "加载VAE"
+    }
+  },
+  "4": {
+    "inputs": {
+      "vae_name": "minimax_h3_audio_vae_fp32.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "加载VAE"
+    }
+  },
+  "5": {
+    "inputs": {
+      "image": "02_qwen_Image_edit_subgraphed_input_image.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像"
+    }
+  },
+  "6": {
+    "inputs": {
+      "image": "03_video_wan2_2_14B_i2v_subgraphed_input_image.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像"
+    }
+  },
+  "7": {
+    "inputs": {
+      "image": "2_pass_pose_worship_input.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像"
+    }
+  },
+  "8": {
+    "inputs": {
+      "image": "2x2_grid_image.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像"
+    }
+  },
+  "9": {
+    "inputs": {
+      "prompt": "生成一段 5 秒、16:9、1280×736、24 FPS、原生立体声的真人电影感奇幻短片。\n图片 1（<Picture 1>）是视频首帧：韩立和银月站在黄昏的雾蒙山崖小路上，保持这张图的开场构图、人物相对位置和光线方向。\n图片 2（<Picture 2>）是视频尾帧：两人走到山崖边并停下，保持这张图的结束构图和站姿。\n图片 3（<Picture 3>）是韩立的角色参考图，只用于韩立的身份、脸、发型和深色古装。\n图片 4（<Picture 4>）是银月的角色参考图，只用于银月的身份、脸、银色长发、耳朵和银白色古装。\n0—1 秒：从图片 1（<Picture 1>）的画面开始，韩立和银月保持首帧中的站位与姿势。镜头为稳定中景，金色暮光照亮雾气和衣料，人物自然呼吸，衣袖和发丝被山风轻轻带动。\n1—3.8 秒：两人沿山崖小路并肩向前走，银月先转头看向韩立，韩立随后放慢半步回应她的目光。镜头以很慢的速度向前跟随，不改变两人的相对位置；动作连续、脚步自然，背景雾气向后移动。\n3.8—5 秒：两人走到图片 2（<Picture 2>）所示的位置并停下，身体朝向、距离和镜头构图逐渐对齐尾帧。停稳后保留半秒的表情余波，让观众看清已经从首帧走到了尾帧。不要突然切镜，不新增人物，不改变韩立和银月的身份或服装。\n声音设计：山风、脚步和衣料摩擦声与动作同步；不加入对白和背景音乐，保持自然环境声清晰。",
+      "width": 768,
+      "height": 1344,
+      "length": 124,
+      "task_type": "Hybrid",
+      "audio_mode": "native",
+      "audio_denoise_strength": 0.35,
+      "add_source_as_reference": true,
+      "prompt_primary_audio_ordinal": 0,
+      "strict_prompt_tags": true,
+      "ref_image_size": "match",
+      "reference_video_policy": "official_2_to_15s",
+      "clip": [
+        "2",
+        0
+      ],
+      "video_vae": [
+        "3",
+        0
+      ],
+      "audio_vae": [
+        "4",
+        0
+      ],
+      "first_frame": [
+        "5",
+        0
+      ],
+      "last_frame": [
+        "6",
+        0
+      ],
+      "ref_images.ref_image_0": [
+        "7",
+        0
+      ],
+      "ref_images.ref_image_1": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3AudioConditioningT8",
+    "_meta": {
+      "title": "MiniMax H3 Audio Conditioning (T8)"
+    }
+  },
+  "10": {
+    "inputs": {
+      "noise_seed": 2026081705
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "随机噪波"
+    }
+  },
+  "11": {
+    "inputs": {
+      "model": [
+        "1",
+        0
+      ],
+      "conditioning": [
+        "9",
+        0
+      ]
+    },
+    "class_type": "BasicGuider",
+    "_meta": {
+      "title": "基本引导器"
+    }
+  },
+  "12": {
+    "inputs": {
+      "sampler_name": "euler"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "K采样器选择"
+    }
+  },
+  "13": {
+    "inputs": {
+      "scheduler": "simple",
+      "steps": 8,
+      "denoise": 1,
+      "model": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "BasicScheduler",
+    "_meta": {
+      "title": "基本调度器"
+    }
+  },
+  "14": {
+    "inputs": {
+      "noise": [
+        "10",
+        0
+      ],
+      "guider": [
+        "11",
+        0
+      ],
+      "sampler": [
+        "12",
+        0
+      ],
+      "sigmas": [
+        "13",
+        0
+      ],
+      "latent_image": [
+        "9",
+        1
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "自定义采样器（高级）"
+    }
+  },
+  "15": {
+    "inputs": {
+      "av_latent": [
+        "14",
+        0
+      ],
+      "video_vae": [
+        "3",
+        0
+      ],
+      "audio_vae": [
+        "4",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3AVDecodeT8",
+    "_meta": {
+      "title": "MiniMax H3 AV Decode (T8)"
+    }
+  },
+  "17": {
+    "inputs": {
+      "fps": 24,
+      "bit_depth": 8,
+      "images": [
+        "15",
+        0
+      ],
+      "audio": [
+        "15",
+        1
+      ]
+    },
+    "class_type": "CreateVideo",
+    "_meta": {
+      "title": "创建视频"
+    }
+  },
+  "18": {
+    "inputs": {
+      "filename_prefix": "video/MiniMax_H3_i2v",
+      "format": "auto",
+      "codec": "auto",
+      "video": [
+        "17",
+        0
+      ]
+    },
+    "class_type": "SaveVideo",
+    "_meta": {
+      "title": "保存视频"
+    }
+  }
+}
