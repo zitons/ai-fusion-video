@@ -134,6 +134,9 @@ public class GenerateVideoToolExecutor implements ToolExecutor {
                     .set("storyboardItemId", JSONUtil.createObj()
                         .set("type", "integer")
                         .set("description", "分镜条目ID（可选）。传了之后，视频生成完成会自动回填到该分镜镜头。"))
+                    .set("modelId", JSONUtil.createObj()
+                        .set("type", "integer")
+                        .set("description", "视频模型ID（可选）。不传使用默认视频模型；镜头按模式（多图参考+音色 / 首尾帧）选择模型时传入。"))
                     .set("cameraFixed", JSONUtil.createObj()
                         .set("type", "boolean")
                         .set("description", "是否固定镜头（不做运动），默认 false")))
@@ -160,6 +163,7 @@ public class GenerateVideoToolExecutor implements ToolExecutor {
             String ratio = params.getStr("ratio", "16:9");
             Integer duration = params.getInt("duration", 5);
             Long storyboardItemId = params.getLong("storyboardItemId");
+            Long specifiedModelId = params.getLong("modelId");
             Boolean cameraFixed = params.getBool("cameraFixed", false);
 
             // 解析多模态参考图片列表
@@ -185,7 +189,15 @@ public class GenerateVideoToolExecutor implements ToolExecutor {
             // 确定生成模式
             String generateMode = StrUtil.isNotBlank(firstFrameImageUrl) ? "image2video" : "text2video";
 
-            AiModel model = resolvePreferredModel();
+            // 镜头可按模式指定模型；未指定时用默认视频模型
+            AiModel model = specifiedModelId != null
+                    ? aiModelService.getById(specifiedModelId)
+                    : resolvePreferredModel();
+            if (model == null || model.getId() == null) {
+                return errorResult(specifiedModelId != null
+                        ? "指定的视频模型不存在: " + specifiedModelId
+                        : "未配置可用的视频生成模型");
+            }
 
             // 构建生视频任务
             VideoTask task = VideoTask.builder()

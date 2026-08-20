@@ -77,6 +77,39 @@ const CardItemUI = memo(
       },
       ref
     ) => {
+      // 视频模式：ref2v（多图参考+音色）/ fl2v（首尾帧），存 custom_data.videoMode
+      const [videoMode, setVideoMode] = useState<string>(() => {
+        try {
+          const parsed = item.customData ? JSON.parse(item.customData) : null;
+          return parsed?.videoMode === "fl2v" ? "fl2v" : "ref2v";
+        } catch {
+          return "ref2v";
+        }
+      });
+
+      const handleVideoMode = async (mode: string) => {
+        if (mode === videoMode) return;
+        const previous = videoMode;
+        setVideoMode(mode);
+        try {
+          let parsed: Record<string, unknown> = {};
+          try {
+            parsed = item.customData ? JSON.parse(item.customData) : {};
+          } catch {
+            parsed = {};
+          }
+          parsed.videoMode = mode;
+          const updated = await storyboardApi.updateItem({
+            id: item.id,
+            customData: JSON.stringify(parsed),
+          });
+          onVideoUploaded?.(updated);
+        } catch (err) {
+          setVideoMode(previous);
+          toastApiError(err, "更新视频模式失败");
+        }
+      };
+
       const hasImage =
         item.firstFrameImageUrl || item.imageUrl || item.referenceImageUrl || item.generatedImageUrl;
       const hasVideo = item.generatedVideoUrl || item.videoUrl;
@@ -350,6 +383,38 @@ const CardItemUI = memo(
                   {item.cameraMovement}
                 </span>
               )}
+              {/* 视频模式选择 */}
+              <div
+                className="flex items-center gap-0.5 ml-auto shrink-0"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  onClick={() => void handleVideoMode("ref2v")}
+                  title="多图参考 + 音色固定（默认）"
+                  className={cn(
+                    "text-[10px] px-1.5 py-0.5 rounded-sm font-medium transition-colors",
+                    videoMode === "ref2v"
+                      ? "text-fuchsia-700 bg-fuchsia-100 dark:bg-fuchsia-500/15 dark:text-fuchsia-400"
+                      : "text-muted-foreground/50 hover:text-fuchsia-600 hover:bg-fuchsia-50"
+                  )}
+                >
+                  参考+音色
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleVideoMode("fl2v")}
+                  title="首尾帧（一镜到底）"
+                  className={cn(
+                    "text-[10px] px-1.5 py-0.5 rounded-sm font-medium transition-colors",
+                    videoMode === "fl2v"
+                      ? "text-cyan-700 bg-cyan-100 dark:bg-cyan-500/15 dark:text-cyan-400"
+                      : "text-muted-foreground/50 hover:text-cyan-600 hover:bg-cyan-50"
+                  )}
+                >
+                  首尾帧
+                </button>
+              </div>
             </div>
 
             {/* 画面内容 */}

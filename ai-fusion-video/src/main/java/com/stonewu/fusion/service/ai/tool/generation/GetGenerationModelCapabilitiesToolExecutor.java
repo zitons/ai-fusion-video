@@ -1,6 +1,7 @@
 package com.stonewu.fusion.service.ai.tool.generation;
 
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.stonewu.fusion.entity.ai.AiModel;
@@ -67,6 +68,10 @@ public class GetGenerationModelCapabilitiesToolExecutor implements ToolExecutor 
                             "type": "string",
                             "description": "查询类型：image、video、all（默认 all）",
                             "enum": ["image", "video", "all"]
+                        },
+                        "modelId": {
+                            "type": "integer",
+                            "description": "可选：指定要查询的模型ID（图片或视频）。不传时返回默认模型能力 + 全部视频模型清单。"
                         }
                     },
                     "required": []
@@ -79,6 +84,7 @@ public class GetGenerationModelCapabilitiesToolExecutor implements ToolExecutor 
         try {
             JSONObject params = StrUtil.isBlank(toolInput) ? new JSONObject() : JSONUtil.parseObj(toolInput);
             String requestedType = StrUtil.blankToDefault(params.getStr("modelType"), "all").trim().toLowerCase();
+            Long modelId = params.getLong("modelId");
             if (!"image".equals(requestedType) && !"video".equals(requestedType) && !"all".equals(requestedType)) {
                 return errorResult("modelType 仅支持 image、video、all");
             }
@@ -86,8 +92,26 @@ public class GetGenerationModelCapabilitiesToolExecutor implements ToolExecutor 
             JSONObject result = JSONUtil.createObj()
                     .set("status", "success")
                     .set("requestedModelType", requestedType)
-                    .set("usageHint", "先根据这里的能力结果组织 generate_image 或 generate_video 参数，只传当前默认模型支持的字段。")
+                    .set("usageHint", "先根据这里的能力结果组织 generate_image 或 generate_video 参数，只传当前默认模型支持的字段；多模型场景按镜头需求从 videoModels 中选择匹配的模型并传 modelId。")
                     .set("retryPolicy", "如果某个字段不受支持，请直接删除该字段并改写 prompt，不要重复用相同的不支持参数重试。\n");
+
+            if (modelId != null) {
+                AiModel specified = aiModelService.getById(modelId);
+                if (specified == null) {
+                    return errorResult("模型不存在: " + modelId);
+                }
+                if ("image".equals(requestedType) || "all".equals(requestedType)) {
+                    if (specified.getModelType() != null && specified.getModelType() == MODEL_TYPE_IMAGE) {
+                        result.set("image", buildImageResult(new ResolvedModel(specified, "specified_model")));
+                    }
+                }
+                if ("video".equals(requestedType) || "all".equals(requestedType)) {
+                    if (specified.getModelType() != null && specified.getModelType() == MODEL_TYPE_VIDEO) {
+                        result.set("video", buildVideoResult(new ResolvedModel(specified, "specified_model")));
+                    }
+                }
+                return result.toString();
+            }
 
             if (!"video".equals(requestedType)) {
                 ResolvedModel imageModel = resolvePreferredModel(MODEL_TYPE_IMAGE);
@@ -96,12 +120,34 @@ public class GetGenerationModelCapabilitiesToolExecutor implements ToolExecutor 
             if (!"image".equals(requestedType)) {
                 ResolvedModel videoModel = resolvePreferredModel(MODEL_TYPE_VIDEO);
                 result.set("video", buildVideoResult(videoModel));
+                result.set("videoModels", buildVideoModelsList());
             }
             return result.toString();
         } catch (Exception e) {
             log.error("查询生成模型能力失败", e);
             return errorResult("查询失败: " + e.getMessage());
         }
+    }
+
+    /** 全部视频模型清单：供多模型路由（镜头按模式选模型）使用。 */
+    private JSONArray buildVideoModelsList() {
+        JSONArray array = JSONUtil.createArray();
+        AiModel defaultModel = aiModelService.getDefaultByType(MODEL_TYPE_VIDEO);
+        for (AiModel model : aiModelService.getListByType(MODEL_TYPE_VIDEO)) {
+            JSONObject snapshot = generationModelCapabilityService.buildVideoCapabilitySnapshot(model);
+            JSONObject item = JSONUtil.createObj()
+                    .set("id", model.getId())
+                    .set("code", model.getCode())
+                    .set("isDefault", defaultModel != null
+                            && defaultModel.getId() != null
+                            && defaultModel.getId().equals(model.getId()))
+                    .set("supportsFirstFrame", snapshot.getBool("supportsFirstFrame", false))
+                    .set("supportsLastFrame", snapshot.getBool("supportsLastFrame", false))
+                    .set("supportsReferenceImages", snapshot.getBool("supportsReferenceImages", false))
+                    .set("supportsReferenceAudios", snapshot.getBool("supportsReferenceAudios", false));
+            array.add(item);
+        }
+        return array;
     }
 
     private JSONObject buildImageResult(ResolvedModel resolvedModel) {

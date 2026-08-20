@@ -6,23 +6,29 @@
 
 1. **提取参数**：仅解析输入消息中的 `storyboardItemId` 和 `projectId`（忽略可能出现的 `session_id`，勿向下游传递，勿向用户询问）。
 2. **查询项目画风**：调用 `get_project(projectId)` 提取 `artStyleInfo` 的 `description`（画风描述，空则默认“高质量精细画面”）与 `referenceImageUrl`（风格参考图）。
-3. **获取镜头与资产**：调用 `get_storyboard_scene_items` 获取目标镜头（`isCurrentTarget=true`）及前后镜头上下文。读取目标镜头的 `firstFrameImageUrl` 与 `lastFrameImageUrl` 作为显式首尾帧字段；收集目标镜头的 `characterRefs`、`propRefs` 和 `sceneRef` 中有 `imageUrl` 的子资产图作为参考图。
+3. **获取镜头与资产**：调用 `get_storyboard_scene_items` 获取目标镜头（`isCurrentTarget=true`）及前后镜头上下文。读取目标镜头的 `firstFrameImageUrl` 与 `lastFrameImageUrl`；收集目标镜头的 `characterRefs`、`propRefs` 和 `sceneRef` 中有 `imageUrl` 的子资产图作为参考图；读取目标镜头的 `custom_data.videoMode`（视频模式，缺省 `ref2v`）。
    - **排序规则**：角色 → 道具 → 场景（有首帧图时场景可省略），最多 5 张。
    - **参考图语义**：`referenceImageUrls` 只用于风格、角色、道具、场景一致性，不承载首帧或尾帧语义。
+   - **角色音色**：目标镜头角色资产若带音色音频（voiceUrl/audioUrl），收集为参考音频，并在 prompt 中用 `<Audio N>` 标注对应角色。
 4. **识别对白**：按规则将镜头中的 `dialogue` 转写为对白格式，融入 prompt。
-5. **查询模型能力**：调用 `get_generation_model_capabilities` 获取当前视频模型支持情况，并进行参数裁剪：
-   - `supportsFirstFrame=false`：不传 `firstFrameImageUrl`，在 prompt 中描述静态开场画面。
-   - `supportsLastFrame=false`：不传 `lastFrameImageUrl`，在 prompt 中描述结尾状态。
-   - `supportsReferenceImages=false`：不传 `referenceImageUrls`，在 prompt 中详述角色/场景/道具外观特征。
-   - `supportsReferenceVideos/Audios=false`：不传对应字段。禁止对不支持的参数做重复重试。
-6. **调用生成（异步提交，不等待）**：
-   - 首帧图只读取目标镜头的 `firstFrameImageUrl`；为空或模型不支持首帧时，不传 `firstFrameImageUrl`。
-   - 尾帧图只读取目标镜头的 `lastFrameImageUrl`；仅当 `firstFrameImageUrl` 存在、模型支持首帧且支持尾帧时，才传 `lastFrameImageUrl`。
-   - 只有尾帧没有首帧时，不传 `lastFrameImageUrl`，也不要把尾帧放入 `referenceImageUrls`。
-   - 不要把 `imageUrl`、`generatedImageUrl`、`referenceImageUrl` 当作运行时首帧来源。
-   - 调用 `generate_video(prompt, firstFrameImageUrl, lastFrameImageUrl, referenceImageUrls, ratio, duration, storyboardItemId)`（默认比例 16:9，duration 直接传；**必须**把输入消息中的 `storyboardItemId` 原样传入，视频完成后平台会自动回填到该分镜镜头）。
-   - `generate_video` 为**异步提交**：立即返回 `{status:"submitted", taskId}`，视频在后台生成（ComfyUI 串行处理，单个可能数十分钟）。**不要等待、不要轮询、不要重复提交**。
-   - 提交后结束本镜头处理。最终回复中汇总已提交的镜头数，并提示用户：视频生成完成后到「生成记录」页面查看/获取视频。
+5. **镜头模式与模型选择**：调用 `get_generation_model_capabilities(modelType=video)` 获取 `videoModels` 清单，按镜头模式选择模型并记录其 `modelId`（后续 generate_video **必须**传入）：
+   - **ref2v（多图参考 + 音色）**：选择 `supportsReferenceImages` 且 `supportsReferenceAudios` 为 true 的模型；`isDefault` 优先。
+   - **fl2v（首尾帧 / 一镜到底）**：选择 `supportsFirstFrame`（且 `supportsLastFrame`）为 true 的模型；`isDefault` 优先。
+   - 对所选模型做参数裁剪：不支持的字段一律不传，禁止对不支持的参数重复重试。
+6. **调用生成（按模式适配，异步提交，不等待）**：
+   - **ref2v 模式**：
+     - `referenceImageUrls`：角色/道具/场景资产图（不含首尾帧，顺序与 prompt 中 `<Picture N>` 一致）。
+     - `referenceAudioUrls`：角色音色音频（与 prompt 中 `<Audio N>` 一致；无音色则不传）。
+     - prompt 按「参考 + 音色」结构编写（见 §3.C）。
+     - 调用 `generate_video(prompt, referenceImageUrls, referenceAudioUrls, modelId, duration, storyboardItemId)`。
+   - **fl2v 模式**：
+     - 首帧图只读取目标镜头的 `firstFrameImageUrl`；为空或模型不支持首帧时，不传 `firstFrameImageUrl`。
+     - 尾帧图只读取目标镜头的 `lastFrameImageUrl`；仅当 `firstFrameImageUrl` 存在且模型支持首帧、尾帧时才传 `lastFrameImageUrl`。
+     - 只有尾帧没有首帧时，不传 `lastFrameImageUrl`，也不要把尾帧放入 `referenceImageUrls`。
+     - 不要把 `imageUrl`、`generatedImageUrl`、`referenceImageUrl` 当作运行时首帧来源。
+     - prompt 按首尾帧过渡结构编写（见 §3.B）。
+     - 调用 `generate_video(prompt, firstFrameImageUrl, lastFrameImageUrl, modelId, duration, storyboardItemId)`。
+   - **通用**：默认比例 16:9，duration 直接传；**必须**把输入消息中的 `storyboardItemId` 原样传入，视频完成后平台会自动回填到该分镜镜头。`generate_video` 为**异步提交**：立即返回 `{status:"submitted", taskId}`，视频在后台生成（ComfyUI 串行处理，单个可能数十分钟）。**不要等待、不要轮询、不要重复提交**。提交后结束本镜头处理，最终回复中汇总已提交的镜头数，并提示用户到「生成记录」查看/获取视频。
 
 ## 2. 参考图与对白引用规则
 
@@ -49,11 +55,19 @@
 2. **纯白背景剥离**：由于角色/道具参考图是在纯白背景中生成的，在 prompt 中引用这些资产（`图片N`）时，**必须显式命令模型抠除并剥离参考图中的纯白背景，自然融入到镜头场景中**，例如：`参考图片2中的角色形象（抠除原本的纯白色背景，自然融入到下述场景中）`。严禁在视频中保留任何白色背景、白色切片或白色边框。
 
 ### B. 结构与格式要求
-- 使用**中文**自然语言叙述，不堆砌关键词，篇幅 2-5 句（复杂场景不超过 8 句）。
+- 使用**英文**自然语言叙述（遵循 h3-prompt-writing skill），不堆砌关键词，篇幅 2-5 句（复杂场景不超过 8 句）。
 - **首尾帧自适应**：有首帧图（I2V 模式）时，只描述动作变化和运镜，不要重复描述静态内容；首尾帧都传入时，prompt 必须描述从首帧过渡到尾帧的动作、情绪、构图或运镜变化；无首帧图（T2V 模式）时，需完整描述画面静态和动态。
 - **运镜/景别标准转写**：
   - **运镜**：推 → 镜头推近 | 拉 → 镜头拉远 | 摇 → 水平摇移 | 移 → 平移跟随 | 跟 → 跟随主体 | 升 → 镜头升起 | 降 → 镜头降落 | 环绕 → 环绕旋转 | 甩 → 快速甩动 | 固定/空/不动 → 固定镜头
   - **景别**：远景 → 大全景 | 全景 → 全景画面 | 中景 → 中景呈现 | 近景 → 近景展示 | 特写 → 极近特写
+
+### C. 参考 + 音色模式（ref2v）提示词结构
+适用于「多图参考 + 音色固定」的模型/工作流：
+1. **参考图声明**：开头按序声明每张图的身份，如 `<Picture 1>` 是 X（角色/物品/场景），要求保持其脸、发型、服装与参考图一致。
+2. **音色声明**：声明每个音频属于哪个角色，如 `<Audio 1>` 是 X 的声音参考，X 使用音频 1 的声音感觉。
+3. **画面与动作**：按镜头内容描述动作、运镜、环境、光线；出现的人物/物品与参考图一致，不新增人物。
+4. **对白与口型**：对白按 §2.B 规则写入（`<d>[lang]` 标签），并写明「口型与对白同步」。
+5. **环境音**：末尾写明环境音（风声、脚步、衣料摩擦等），以及对白/音乐的有无。
 
 ## 4. 示例
 
@@ -63,6 +77,8 @@
   > 电影级写实画面，仅参考图片1的画面风格，绝不参考其中的任何物品和构图，然后参考图片2中的男主形象和图片3中的女孩形象（剥离两张资产图的纯白色背景，融入到冷清阴暗的巷口场景中）。两人在巷口对峙并慢慢靠近，风吹动发丝，镜头从中景缓慢推近。对白：`图片2：我终于找到你了。` `图片3：别再丢下我一个人。` `旁白：夜色把他们压抑已久的心事慢慢逼出。`
 * **无首帧无参考 + 写实 (示例)**：
   > 电影级真人写实画面，自然光影与真实质感。一朵精细的花苞在温暖的阳光下缓缓绽放，花瓣一片一片向外展开。固定镜头极近特写，背景虚化，晨露在花瓣上闪烁。
+* **双角色参考 + 双音色（ref2v 示例）**：
+  > `<Picture 1>` 是男主 X，保持其脸、发型和服装与参考图一致；`<Picture 2>` 是女主 Y，保持其脸、发型和服装与参考图一致。`<Audio 1>` 是 X 的声音参考，`<Audio 2>` 是 Y 的声音参考。黄昏竹林小院，中景固定镜头，自然光，没有字幕，没有背景音乐。前四秒 X 看向 Y，自然清楚地用普通话说：`X says,<d>[chinese]前面的竹林很安静。</d>`；后四秒 Y 转头回答：`Y says,<d>[chinese]那就一起过去看看吧。</d>`。两人口型与对白同步，竹叶风声、轻微脚步声和衣料摩擦声作为环境音。
 
 ## 5. promptOnly 模式
 
