@@ -131,6 +131,11 @@ public class ComfyUiGenerationExecutor {
         throw new BusinessException(504, "ComfyUI 工作流轮询超时: " + promptId);
     }
 
+    /** 一次性查询任务状态（不轮询），供失败任务找回等场景使用。 */
+    public ComfyUiJobResult getJob(ComfyUiExecutionContext context, String promptId) {
+        return nativeClient.getJob(context.apiConfig(), promptId);
+    }
+
     public List<ComfyUiStoredOutput> storeOutputs(ComfyUiExecutionContext context,
                                                    ComfyUiJobResult job) {
         List<ComfyUiOutputBinding> bindings = documentService.parseOutputBindings(

@@ -99,7 +99,7 @@ public class ComfyUiWorkflowValidationService {
         try {
             generationExecutor.submit(submission);
             long timeout = context.workflow().getModelType() == 2
-                    ? 25L * 60L * 1_000L : 60L * 60L * 1_000L;
+                    ? 25L * 60L * 1_000L : 120L * 60L * 1_000L;
             var job = generationExecutor.waitForJob(
                     context, submission.promptId(), 2_000L, timeout);
             List<ComfyUiStoredOutput> stored = generationExecutor.storeOutputs(context, job);

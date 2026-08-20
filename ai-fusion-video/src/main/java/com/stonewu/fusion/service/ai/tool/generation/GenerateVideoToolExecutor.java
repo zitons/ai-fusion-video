@@ -131,6 +131,9 @@ public class GenerateVideoToolExecutor implements ToolExecutor {
                     .set("duration", JSONUtil.createObj()
                         .set("type", "integer")
                         .set("description", "视频时长（秒），默认 5"))
+                    .set("storyboardItemId", JSONUtil.createObj()
+                        .set("type", "integer")
+                        .set("description", "分镜条目ID（可选）。传了之后，视频生成完成会自动回填到该分镜镜头。"))
                     .set("cameraFixed", JSONUtil.createObj()
                         .set("type", "boolean")
                         .set("description", "是否固定镜头（不做运动），默认 false")))
@@ -156,6 +159,7 @@ public class GenerateVideoToolExecutor implements ToolExecutor {
             String lastFrameImageUrl = params.getStr("lastFrameImageUrl");
             String ratio = params.getStr("ratio", "16:9");
             Integer duration = params.getInt("duration", 5);
+            Long storyboardItemId = params.getLong("storyboardItemId");
             Boolean cameraFixed = params.getBool("cameraFixed", false);
 
             // 解析多模态参考图片列表
@@ -198,6 +202,8 @@ public class GenerateVideoToolExecutor implements ToolExecutor {
                         .modelId(model.getId())
                     .count(1)
                     .userId(context.getUserId())
+                    // 分镜条目映射：视频完成/找回后自动回填到该分镜镜头
+                    .category(storyboardItemId != null ? "storyboard:" + storyboardItemId : null)
                     .build();
 
                     generationModelCapabilityService.validateVideoTask(model, task);
@@ -207,37 +213,24 @@ public class GenerateVideoToolExecutor implements ToolExecutor {
                     firstFrameImageUrl != null ? "有" : "无",
                     referenceImageUrlList.size());
 
-            // 提交到队列并同步等待结果
-            VideoTask completed = videoGenerationConsumer.submitAndWait(task, WAIT_TIMEOUT_MS);
+            // 提交到队列后立即返回（异步生成：ComfyUI 串行处理可能长达数十分钟，
+            // 同步等待的固定超时无法覆盖并行子 Agent 的排队时间，提交即回，
+            // 完成后到「生成记录」查看/获取视频）
+            String taskId = videoGenerationConsumer.submitTask(task);
 
-            // 从完成的任务中获取生成的视频 URL
-            List<VideoItem> items = videoGenerationService.listItems(completed.getId());
-            VideoItem videoItem = items.stream()
-                    .filter(item -> StrUtil.isNotBlank(item.getVideoUrl()))
-                    .findFirst()
-                    .orElse(null);
-
-            if (videoItem == null) {
-                return errorResult("生成完成但未获取到视频 URL");
-            }
-
-            log.info("[generate_video] 生成成功: videoUrl={}, coverUrl={}",
-                    videoItem.getVideoUrl(), videoItem.getCoverUrl());
+            log.info("[generate_video] 已提交(异步): taskId={}, prompt={}, mode={}, ratio={}, duration={}s, modelId={}",
+                    taskId, StrUtil.sub(prompt, 0, 80), generateMode, ratio, duration, model.getId());
 
             return JSONUtil.createObj()
-                    .set("status", "success")
-                    .set("videoUrl", videoItem.getVideoUrl())
-                    .set("coverUrl", videoItem.getCoverUrl())
-                    .set("duration", videoItem.getDuration())
+                    .set("status", "submitted")
+                    .set("taskId", taskId)
+                    .set("message", "视频任务已提交，正在异步生成。生成完成后可在「生成记录」中查看并获取视频。")
                     .set("prompt", prompt)
                     .toString();
 
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return errorResult("生成任务被中断");
         } catch (Exception e) {
-            log.error("[generate_video] 生成视频失败", e);
-            return errorResult("生成失败: " + e.getMessage());
+            log.error("[generate_video] 提交视频任务失败", e);
+            return errorResult("提交失败: " + e.getMessage());
         }
     }
 

@@ -8,6 +8,7 @@ import com.stonewu.fusion.convert.generation.GenerationConvert;
 import com.stonewu.fusion.entity.generation.VideoItem;
 import com.stonewu.fusion.entity.generation.VideoTask;
 import com.stonewu.fusion.service.generation.video.VideoGenerationService;
+import com.stonewu.fusion.service.generation.video.VideoTaskRecoveryService;
 import com.stonewu.fusion.service.generation.video.consumer.VideoGenerationConsumer;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -30,6 +31,7 @@ public class VideoGenerationController {
 
     private final VideoGenerationService videoGenerationService;
     private final VideoGenerationConsumer videoGenerationConsumer;
+    private final VideoTaskRecoveryService videoTaskRecoveryService;
 
     @Operation(summary = "提交生视频任务")
     @PostMapping("/submit")
@@ -56,8 +58,11 @@ public class VideoGenerationController {
     @GetMapping("/page")
     public CommonResult<PageResult<VideoTask>> page(PageParam pageParam) {
         Long userId = requireCurrentUserId();
-        return CommonResult.success(videoGenerationService.pageByUser(userId,
-                pageParam.getPageNo(), pageParam.getPageSize()));
+        PageResult<VideoTask> result = videoGenerationService.pageByUser(userId,
+                pageParam.getPageNo(), pageParam.getPageSize());
+        // 失败任务找回：瞬时网络/超时导致的失败，若 ComfyUI 已出片则自动补齐并标记完成
+        videoTaskRecoveryService.tryRecoverPage(result.getList());
+        return CommonResult.success(result);
     }
 
     @Operation(summary = "取消视频生成任务")
