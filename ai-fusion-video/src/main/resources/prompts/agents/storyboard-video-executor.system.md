@@ -11,14 +11,19 @@
    - **参考图语义**：`referenceImageUrls` 只用于风格、角色、道具、场景一致性，不承载首帧或尾帧语义。
    - **角色音色**：目标镜头角色资产若带音色音频（voiceUrl/audioUrl），收集为参考音频，并在 prompt 中用 `<Audio N>` 标注对应角色。
 4. **识别对白**：按规则将镜头中的 `dialogue` 转写为对白格式，融入 prompt。
-5. **镜头模式与模型选择**：调用 `get_generation_model_capabilities(modelType=video)` 获取 `videoModels` 清单，**按首帧衔接判定二选一**并记录 `modelId`（后续 generate_video **必须**传入）：
-   - **判定规则**：比较目标镜头的 `firstFrameImageUrl` 与**上一镜头的 `lastFrameImageUrl`**（前后镜头上下文已提供）：
-     - **相同（连续镜头 / 一镜到底）** → 选首尾帧模型（`supportsFirstFrame && supportsLastFrame`）。
-     - **不同或缺失**（含无上一镜头、或上一镜无尾帧）→ 选参考模型（`supportsReferenceImages && supportsReferenceAudios`）。
-   - **材料兜底**：参考方向但镜头**没有资产参考图** → 改走首尾帧模型；首尾帧方向但镜头**没有首尾帧** → 改走参考模型；两者都没有 → 不生成，告知用户先补资产图或首尾帧。
+5. **镜头模式与模型选择**：调用 `get_generation_model_capabilities(modelType=video)` 获取 `videoModels` 清单，**默认选能力最全的全锁模型**（`supportsFirstFrame && supportsLastFrame && supportsReferenceImages && supportsReferenceAudios`，即 `isDefault` 模型），并记录 `modelId`（后续 generate_video **必须**传入）：
+   - **全锁（默认）**：镜头有首尾帧和资产时，**首尾帧 + 参考图 + 音色全部传入**（一镜到底时首帧 = 上一镜尾帧，见衔接规则）。
+   - **材料降级**：全锁模型材料不足时按需降级——只有首尾帧无资产 → 选首尾帧模型（`supportsFirstFrame && supportsLastFrame`）；只有资产无首尾帧 → 选参考模型（`supportsReferenceImages && supportsReferenceAudios`）；两者都没有 → 不生成，告知用户先补资产图或首尾帧。
    - **显式指定覆盖**：镜头 `custom_data.videoMode=ref2v` → 强制参考模型；`=fl2v` → 强制首尾帧模型。
    - 对所选模型做参数裁剪：不支持的字段一律不传，禁止对不支持的参数重复重试。
 6. **调用生成（按所选方向适配，异步提交，不等待）**：
+   - **全锁（首尾帧 + 参考图 + 音色）**：
+     - `firstFrameImageUrl`：一镜到底时取上一镜头 `lastFrameImageUrl`；否则取目标镜头 `firstFrameImageUrl`。
+     - `lastFrameImageUrl`：目标镜头 `lastFrameImageUrl`。
+     - `referenceImageUrls`：角色/场景资产图（顺序与 prompt 中 `<Picture N>` 一致）。
+     - `referenceAudioUrls`：角色音色音频（与 prompt 中 `<Audio N>` 一致；无音色则不传）。
+     - prompt 按「首尾帧 + 参考 + 音色」结构编写（见 §3.C）。
+     - 调用 `generate_video(prompt, firstFrameImageUrl, lastFrameImageUrl, referenceImageUrls, referenceAudioUrls, modelId, duration, storyboardItemId)`。
    - **参考方向（ref2v）**：
      - `referenceImageUrls`：角色/场景资产图（不含首尾帧，顺序与 prompt 中 `<Picture N>` 一致）。
      - `referenceAudioUrls`：角色音色音频（与 prompt 中 `<Audio N>` 一致；无音色则不传）。
