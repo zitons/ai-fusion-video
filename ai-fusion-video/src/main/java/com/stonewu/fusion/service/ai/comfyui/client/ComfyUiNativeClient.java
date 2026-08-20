@@ -460,13 +460,11 @@ public class ComfyUiNativeClient {
 
     private String normalizeContentType(String value) {
         if (StrUtil.isBlank(value)) {
-            throw new BusinessException(400, "ComfyUI 上传图片缺少 Content-Type");
+            throw new BusinessException(400, "ComfyUI 上传文件缺少 Content-Type");
         }
-        String contentType = value.split(";", 2)[0].trim();
-        if (!contentType.startsWith("image/")) {
-            throw new BusinessException(400, "ComfyUI /upload/image 只接受图片");
-        }
-        return contentType;
+        // 图片/音频/视频共用：仅规范化（去掉参数），不做类型白名单。
+        // 类型校验由调用方（ComfyUiInputResourceService）按资源类型执行。
+        return value.split(";", 2)[0].trim();
     }
 
     private String extensionOf(String filename) {
