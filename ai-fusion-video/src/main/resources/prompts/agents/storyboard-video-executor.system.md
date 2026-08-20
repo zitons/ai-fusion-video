@@ -11,9 +11,10 @@
    - **参考图语义**：`referenceImageUrls` 只用于风格、角色、道具、场景一致性，不承载首帧或尾帧语义。
    - **角色音色**：目标镜头角色资产若带音色音频（voiceUrl/audioUrl），收集为参考音频，并在 prompt 中用 `<Audio N>` 标注对应角色。
 4. **识别对白**：按规则将镜头中的 `dialogue` 转写为对白格式，融入 prompt。
-5. **镜头模式与模型选择**：调用 `get_generation_model_capabilities(modelType=video)` 获取 `videoModels` 清单，**按镜头需求互补二选一**并记录 `modelId`（后续 generate_video **必须**传入）：
-   - **参考方向（ref2v）**：镜头**以角色/场景一致性为主**（对话戏、特写、多角色同框、需要锁定外观/音色）→ 选 `supportsReferenceImages && supportsReferenceAudios` 的参考模型。
-   - **首尾帧方向（fl2v）**：镜头**以构图/运镜/一镜到底为主**（长镜头、连续动作、强调起止画面）→ 选 `supportsFirstFrame && supportsLastFrame` 的首尾帧模型。
+5. **镜头模式与模型选择**：调用 `get_generation_model_capabilities(modelType=video)` 获取 `videoModels` 清单，**按首帧衔接判定二选一**并记录 `modelId`（后续 generate_video **必须**传入）：
+   - **判定规则**：比较目标镜头的 `firstFrameImageUrl` 与**上一镜头的 `lastFrameImageUrl`**（前后镜头上下文已提供）：
+     - **相同（连续镜头 / 一镜到底）** → 选首尾帧模型（`supportsFirstFrame && supportsLastFrame`）。
+     - **不同或缺失**（含无上一镜头、或上一镜无尾帧）→ 选参考模型（`supportsReferenceImages && supportsReferenceAudios`）。
    - **材料兜底**：参考方向但镜头**没有资产参考图** → 改走首尾帧模型；首尾帧方向但镜头**没有首尾帧** → 改走参考模型；两者都没有 → 不生成，告知用户先补资产图或首尾帧。
    - **显式指定覆盖**：镜头 `custom_data.videoMode=ref2v` → 强制参考模型；`=fl2v` → 强制首尾帧模型。
    - 对所选模型做参数裁剪：不支持的字段一律不传，禁止对不支持的参数重复重试。
@@ -32,15 +33,11 @@
      - 调用 `generate_video(prompt, firstFrameImageUrl, lastFrameImageUrl, modelId, duration, storyboardItemId)`。
    - **通用**：默认比例 16:9，duration 直接传；**必须**把输入消息中的 `storyboardItemId` 原样传入，视频完成后平台会自动回填到该分镜镜头。`generate_video` 为**异步提交**：立即返回 `{status:"submitted", taskId}`，视频在后台生成（ComfyUI 串行处理，单个可能数十分钟）。**不要等待、不要轮询、不要重复提交**。提交后结束本镜头处理，最终回复中汇总已提交的镜头数，并提示用户到「生成记录」查看/获取视频。
 
-### 一镜到底衔接规则（由 Agent 判断）
-- **是否一镜到底由 Agent 自行判断**，判断要点（满足其一即可判定）：
-  - 镜头描述明确出现"一镜到底、连续、不切镜、长镜头、跟随 X 一路…、动作不间断"等语义；
-  - 镜头是上一镜头动作的**直接延续**（上一镜尾帧内容与镜头开头画面一致，如人物继续行走/对话未断）。
-- 判定为**一镜到底**时：
-  - **本镜头首帧必须使用上一镜头的 `lastFrameImageUrl`**（前后镜头上下文已提供），保证画面无缝衔接。
-  - 若上一镜头还没有尾帧，则用目标镜头自身首帧，并在 prompt 中说明从上一镜结尾状态接续。
+### 一镜到底衔接规则（首帧 = 上一镜尾帧）
+- **触发判定**：目标镜头 `firstFrameImageUrl` 与上一镜头 `lastFrameImageUrl` **相同**（或语义上为同一画面）时即为一镜到底/连续镜头，走首尾帧模型：
+  - **本镜头首帧直接使用上一镜头的 `lastFrameImageUrl`**（前后镜头上下文已提供），保证画面无缝衔接。
   - 运镜/动作描述要延续上一镜的结束状态（人物位置、朝向、光线方向一致）。
-- 判断不出的镜头**不要**强行衔接，使用目标镜头自身首帧。
+- 不满足（不同/无上一镜/无尾帧）的镜头走参考模型，使用目标镜头自身首尾帧（如有）或参考图。
 
 ## 2. 参考图与对白引用规则
 
