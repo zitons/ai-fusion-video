@@ -137,16 +137,18 @@ public class ComfyUiNativeClient {
             throw new BusinessException(400, "上传到 ComfyUI 的音频不能为空");
         }
         String safeFileName = safeFileName(fileName);
+        // 网关只代理 /upload/image（/upload/audio 常返回 405）；该接口按字段名写文件，
+        // 音频文件同样可写入 input 目录供 LoadAudio 使用。
         MultipartBody.Builder body = new MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
-                .addFormDataPart("audio", safeFileName,
+                .addFormDataPart("image", safeFileName,
                         RequestBody.create(bytes, MediaType.get(normalizeContentType(contentType))))
                 .addFormDataPart("type", "input")
                 .addFormDataPart("overwrite", "false");
         if (StrUtil.isNotBlank(subfolder)) {
             body.addFormDataPart("subfolder", safeSubfolder(subfolder));
         }
-        Request request = request(apiConfig, "/upload/audio")
+        Request request = request(apiConfig, "/upload/image")
                 .post(body.build())
                 .build();
         JsonNode response = executeJson(apiConfig, request, "上传输入音频", 200);
