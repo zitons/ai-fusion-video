@@ -1,11 +1,14 @@
 "use client";
 
-import React, { memo, useState, useMemo } from "react";
-import { Film, Plus, Clock, Camera, Image as ImageIcon, GripHorizontal, Video, Play, Trash2 } from "lucide-react";
+import React, { memo, useState, useMemo, useRef } from "react";
+import { Film, Plus, Clock, Camera, Image as ImageIcon, GripHorizontal, Video, Play, Trash2, Upload, Loader2 } from "lucide-react";
 import { VideoPreviewDialog } from "@/components/dashboard/video-preview-dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { resolveMediaUrl } from "@/lib/api/client";
+import { uploadFile } from "@/lib/api/storage";
+import { storyboardApi } from "@/lib/api/storyboard";
+import { toastApiError } from "@/lib/api/toast-api-error";
 import type { StoryboardFrameType, StoryboardItem } from "@/lib/api/storyboard";
 import { SafeImage } from "@/components/ui/safe-image";
 import {
@@ -47,6 +50,7 @@ const CardItemUI = memo(
       onVideoGen?: (itemId: number) => void;
       onOpenFrameDialog?: (item: StoryboardItem, frameType: StoryboardFrameType) => void;
       onPreviewVideo?: (videoUrl: string) => void;
+      onVideoUploaded?: (item: StoryboardItem) => void;
       attributes?: SortableBindings["attributes"];
       listeners?: SortableBindings["listeners"];
       style?: React.CSSProperties;
@@ -64,6 +68,7 @@ const CardItemUI = memo(
         onVideoGen,
         onOpenFrameDialog,
         onPreviewVideo,
+        onVideoUploaded,
         attributes,
         listeners,
         style,
@@ -85,6 +90,31 @@ const CardItemUI = memo(
       const rawVideoUrl = (item.generatedVideoUrl || item.videoUrl || "") as string;
       const videoSrc = resolveMediaUrl(item.generatedVideoUrl || item.videoUrl) || "";
       const imageSrc = (item.firstFrameImageUrl || item.generatedImageUrl || item.imageUrl || item.referenceImageUrl) as string;
+
+      // 上传视频：上传到存储 → 更新分镜条目 → 通知父级刷新
+      const videoFileInputRef = useRef<HTMLInputElement>(null);
+      const [uploadingVideo, setUploadingVideo] = useState(false);
+
+      const handleVideoFile = async (file?: File) => {
+        if (!file || uploadingVideo) return;
+        setUploadingVideo(true);
+        try {
+          const url = await uploadFile(file, "videos");
+          const updated = await storyboardApi.updateItem({
+            id: item.id,
+            generatedVideoUrl: url,
+          });
+          setMediaMode("video");
+          onVideoUploaded?.(updated);
+        } catch (err) {
+          toastApiError(err, "上传视频失败");
+        } finally {
+          setUploadingVideo(false);
+          if (videoFileInputRef.current) {
+            videoFileInputRef.current.value = "";
+          }
+        }
+      };
 
       return (
         <div
@@ -166,12 +196,32 @@ const CardItemUI = memo(
             </div>
 
             {/* 镜号标签 -> 左上角 */}
-            <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-black/50 backdrop-blur-sm text-white/95 text-[10px] font-bold z-10">
-              #{item.shotNumber || idx + 1}
+            <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-black/50 backdrop-blur-sm text-white/95 text-[10px] font-bold z-10">              #{item.shotNumber || idx + 1}
             </div>
 
             {/* 时长与删除操作 -> 右上角 */}
             <div className="absolute top-2 right-2 z-20 flex items-center gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                size="icon-sm"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  videoFileInputRef.current?.click();
+                }}
+                aria-label="上传视频"
+                title="上传视频"
+                disabled={uploadingVideo}
+              >
+                {uploadingVideo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+              </Button>
+              <input
+                ref={videoFileInputRef}
+                type="file"
+                accept="video/*"
+                className="hidden"
+                onChange={(event) => void handleVideoFile(event.target.files?.[0])}
+              />
               {item.duration && (
                 <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/50 backdrop-blur-sm text-white/95 text-[10px]">
                   <Clock className="h-2.5 w-2.5 opacity-80" />
@@ -344,6 +394,7 @@ function SortableCardItem({
   onVideoGen,
   onOpenFrameDialog,
   onPreviewVideo,
+  onVideoUploaded,
 }: {
   item: StoryboardItem;
   idx: number;
@@ -353,6 +404,7 @@ function SortableCardItem({
   onVideoGen?: (itemId: number) => void;
   onOpenFrameDialog?: (item: StoryboardItem, frameType: StoryboardFrameType) => void;
   onPreviewVideo?: (videoUrl: string) => void;
+  onVideoUploaded?: (item: StoryboardItem) => void;
 }) {
   const {
     attributes,
@@ -380,6 +432,7 @@ function SortableCardItem({
       onVideoGen={onVideoGen}
       onOpenFrameDialog={onOpenFrameDialog}
       onPreviewVideo={onPreviewVideo}
+      onVideoUploaded={onVideoUploaded}
       attributes={attributes}
       listeners={listeners}
       isDragging={isDragging}
@@ -396,6 +449,7 @@ export function StoryboardCardView({
   onReorderItems,
   onVideoGen,
   onOpenFrameDialog,
+  onVideoUploaded,
 }: {
   items: StoryboardItem[];
   selectedItemId: number | null;
@@ -405,6 +459,7 @@ export function StoryboardCardView({
   onReorderItems?: (reordered: StoryboardItem[]) => void;
   onVideoGen?: (itemId: number) => void;
   onOpenFrameDialog?: (item: StoryboardItem, frameType: StoryboardFrameType) => void;
+  onVideoUploaded?: (item: StoryboardItem) => void;
 }) {
   const [activeId, setActiveId] = useState<number | null>(null);
   const [previewVideoUrl, setPreviewVideoUrl] = useState<string | null>(null);
@@ -489,6 +544,7 @@ export function StoryboardCardView({
                 onVideoGen={onVideoGen}
                 onOpenFrameDialog={onOpenFrameDialog}
                 onPreviewVideo={setPreviewVideoUrl}
+                onVideoUploaded={onVideoUploaded}
               />
             ))}
 

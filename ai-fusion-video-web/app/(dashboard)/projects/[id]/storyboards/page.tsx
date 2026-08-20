@@ -1425,6 +1425,7 @@ export default function StoryboardTabPage() {
                     }
                     onVideoGen={handleVideoGen}
                     onOpenFrameDialog={handleOpenFrameDialog}
+                    onVideoUploaded={updateItemInSceneGroups}
                   />
                 )}
               </div>

@@ -205,6 +205,7 @@ export interface StoryboardItemUpdateReq {
   firstFramePrompt?: string | null;
   lastFramePrompt?: string | null;
   videoPrompt?: string | null;
+  generatedVideoUrl?: string | null;
   status?: number;
 }
 

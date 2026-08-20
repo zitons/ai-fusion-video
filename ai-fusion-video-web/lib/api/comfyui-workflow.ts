@@ -155,10 +155,12 @@ export const comfyUiWorkflowApi = {
       `/api/ai/comfyui/workflow/version/validate?versionId=${versionId}`,
     ),
   testVersion: (versionId: number, inputs: Record<string, unknown>) =>
-    http.post<never, ComfyUiWorkflowTestResult>("/api/ai/comfyui/workflow/version/test", {
-      versionId,
-      inputs,
-    }),
+    // 后端同步轮询 ComfyUI，视频最长等待 120 分钟，必须覆盖默认 30s 超时
+    http.post<never, ComfyUiWorkflowTestResult>(
+      "/api/ai/comfyui/workflow/version/test",
+      { versionId, inputs },
+      { timeout: 125 * 60 * 1000 },
+    ),
   publish: (workflowId: number, versionId: number) =>
     http.post<never, boolean>(
       `/api/ai/comfyui/workflow/publish?workflowId=${workflowId}&versionId=${versionId}`,
