@@ -169,14 +169,17 @@ public class ComfyUiGenerationExecutor {
                 context.model().getModelType(), context.version().getApiWorkflowJson(),
                 context.version().getInputBindingsJson());
         Set<String> imageFields = new LinkedHashSet<>();
+        Set<String> audioFields = new LinkedHashSet<>();
         for (ComfyUiInputBinding binding : bindings) {
-            if ("uploaded_video".equals(binding.valueType())
-                    || "uploaded_audio".equals(binding.valueType())) {
+            if ("uploaded_video".equals(binding.valueType())) {
                 throw new BusinessException(400,
-                        "Native API 第一版不支持视频/音频文件上传绑定: " + binding.businessField());
+                        "Native API 暂不支持视频文件上传绑定: " + binding.businessField());
             }
             if ("uploaded_image".equals(binding.valueType())) {
                 imageFields.add(binding.businessField());
+            }
+            if ("uploaded_audio".equals(binding.valueType())) {
+                audioFields.add(binding.businessField());
             }
         }
         for (String field : imageFields) {
@@ -184,6 +187,13 @@ public class ComfyUiGenerationExecutor {
             if (raw == null) continue;
             List<String> sources = toStringList(raw, field);
             values.put(field, inputResourceService.uploadImages(
+                    context.apiConfig(), taskKey, field, sources));
+        }
+        for (String field : audioFields) {
+            Object raw = values.get(field);
+            if (raw == null) continue;
+            List<String> sources = toStringList(raw, field);
+            values.put(field, inputResourceService.uploadAudios(
                     context.apiConfig(), taskKey, field, sources));
         }
     }

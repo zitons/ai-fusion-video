@@ -128,6 +128,38 @@ public class ComfyUiNativeClient {
         return new ComfyUiUploadResult(name, returnedSubfolder, returnedType);
     }
 
+    public ComfyUiUploadResult uploadAudio(ApiConfig apiConfig,
+                                           byte[] bytes,
+                                           String fileName,
+                                           String contentType,
+                                           String subfolder) {
+        if (bytes == null || bytes.length == 0) {
+            throw new BusinessException(400, "上传到 ComfyUI 的音频不能为空");
+        }
+        String safeFileName = safeFileName(fileName);
+        MultipartBody.Builder body = new MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addFormDataPart("audio", safeFileName,
+                        RequestBody.create(bytes, MediaType.get(normalizeContentType(contentType))))
+                .addFormDataPart("type", "input")
+                .addFormDataPart("overwrite", "false");
+        if (StrUtil.isNotBlank(subfolder)) {
+            body.addFormDataPart("subfolder", safeSubfolder(subfolder));
+        }
+        Request request = request(apiConfig, "/upload/audio")
+                .post(body.build())
+                .build();
+        JsonNode response = executeJson(apiConfig, request, "上传输入音频", 200);
+        String name = requiredText(response, "name", "ComfyUI 上传响应缺少 name");
+        String returnedSubfolder = requiredString(
+                response, "subfolder", "ComfyUI 上传响应缺少 subfolder");
+        String returnedType = requiredText(response, "type", "ComfyUI 上传响应缺少 type");
+        if (!"input".equals(returnedType)) {
+            throw new BusinessException(502, "ComfyUI 上传响应 type 必须是 input");
+        }
+        return new ComfyUiUploadResult(name, returnedSubfolder, returnedType);
+    }
+
     public ComfyUiPromptResponse submitPrompt(ApiConfig apiConfig,
                                                ObjectNode prompt,
                                                String promptId) {
