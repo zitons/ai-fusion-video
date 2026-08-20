@@ -11,25 +11,40 @@
    - **参考图语义**：`referenceImageUrls` 只用于风格、角色、道具、场景一致性，不承载首帧或尾帧语义。
    - **角色音色**：目标镜头角色资产若带音色音频（voiceUrl/audioUrl），收集为参考音频，并在 prompt 中用 `<Audio N>` 标注对应角色。
 4. **识别对白**：按规则将镜头中的 `dialogue` 转写为对白格式，融入 prompt。
-5. **镜头模式与模型选择**：调用 `get_generation_model_capabilities(modelType=video)` 获取 `videoModels` 清单，按镜头模式选择模型并记录其 `modelId`（后续 generate_video **必须**传入）：
-   - **ref2v（多图参考 + 音色）**：选择 `supportsReferenceImages` 且 `supportsReferenceAudios` 为 true 的模型；`isDefault` 优先。
-     - **兜底**：若目标镜头**没有可用资产参考图**（characterRefs/propRefs/sceneRef 均无 imageUrl），ref2v 模式不可硬跑（参考位会落到工作流默认图），应改用 fl2v 模型走首尾帧；若首尾帧也没有，用文本描述并明确告知用户先补资产图。
-   - **fl2v（首尾帧 / 一镜到底）**：选择 `supportsFirstFrame`（且 `supportsLastFrame`）为 true 的模型；`isDefault` 优先。
+5. **镜头模式与模型选择**：调用 `get_generation_model_capabilities(modelType=video)` 获取 `videoModels` 清单，**按镜头实际材料择优**选择模型并记录其 `modelId`（后续 generate_video **必须**传入）：
+   - **默认（全锁，recommended）**：镜头同时有**首尾帧**和**资产参考图**时，选择 `supportsFirstFrame && supportsLastFrame && supportsReferenceImages && supportsReferenceAudios` 全支持的模型（即 `isDefault` 的全锁模型），**首尾帧 + 参考图 + 音色全部传入**。
+   - **只有首尾帧、无资产图**：参考位会落到工作流默认图，禁止硬跑全锁/参考模型；选 `supportsFirstFrame && supportsLastFrame` 的首尾帧模型（Fast）。
+   - **只有资产图、无首尾帧**：选 `supportsReferenceImages && supportsReferenceAudios` 的参考模型（Ref2V）。
+   - **两者都没有**：不生成，明确告知用户先补资产图或首尾帧。
+   - **显式指定模式覆盖**：镜头 `custom_data.videoMode=fl2v` 时强制走首尾帧模型；`=ref2v` 时强制走参考模型；缺省按上面的材料择优（默认全锁）。
    - 对所选模型做参数裁剪：不支持的字段一律不传，禁止对不支持的参数重复重试。
-6. **调用生成（按模式适配，异步提交，不等待）**：
-   - **ref2v 模式**：
-     - `referenceImageUrls`：角色/道具/场景资产图（不含首尾帧，顺序与 prompt 中 `<Picture N>` 一致）。
+6. **调用生成（按所选模型适配，异步提交，不等待）**：
+   - **全锁模式（首尾帧 + 参考图 + 音色）**：
+     - `firstFrameImageUrl`：**一镜到底时取上一镜头的 `lastFrameImageUrl`**（保证画面无缝衔接）；否则取目标镜头 `firstFrameImageUrl`。
+     - `lastFrameImageUrl`：目标镜头 `lastFrameImageUrl`。
+     - `referenceImageUrls`：角色/场景资产图（不含首尾帧，顺序与 prompt 中 `<Picture N>` 一致）。
      - `referenceAudioUrls`：角色音色音频（与 prompt 中 `<Audio N>` 一致；无音色则不传）。
-     - prompt 按「参考 + 音色」结构编写（见 §3.C）。
-     - 调用 `generate_video(prompt, referenceImageUrls, referenceAudioUrls, modelId, duration, storyboardItemId)`。
-   - **fl2v 模式**：
+     - prompt 按「首尾帧 + 参考 + 音色」结构编写（见 §3.C）。
+     - 调用 `generate_video(prompt, firstFrameImageUrl, lastFrameImageUrl, referenceImageUrls, referenceAudioUrls, modelId, duration, storyboardItemId)`。
+   - **首尾帧模式（fl2v）**：
      - 首帧图只读取目标镜头的 `firstFrameImageUrl`；为空或模型不支持首帧时，不传 `firstFrameImageUrl`。
      - 尾帧图只读取目标镜头的 `lastFrameImageUrl`；仅当 `firstFrameImageUrl` 存在且模型支持首帧、尾帧时才传 `lastFrameImageUrl`。
      - 只有尾帧没有首帧时，不传 `lastFrameImageUrl`，也不要把尾帧放入 `referenceImageUrls`。
      - 不要把 `imageUrl`、`generatedImageUrl`、`referenceImageUrl` 当作运行时首帧来源。
      - prompt 按首尾帧过渡结构编写（见 §3.B）。
      - 调用 `generate_video(prompt, firstFrameImageUrl, lastFrameImageUrl, modelId, duration, storyboardItemId)`。
+   - **参考模式（ref2v）**：
+     - `referenceImageUrls`：角色/场景资产图（不含首尾帧，顺序与 prompt 中 `<Picture N>` 一致）。
+     - `referenceAudioUrls`：角色音色音频（与 prompt 中 `<Audio N>` 一致；无音色则不传）。
+     - prompt 按「参考 + 音色」结构编写（见 §3.C）。
+     - 调用 `generate_video(prompt, referenceImageUrls, referenceAudioUrls, modelId, duration, storyboardItemId)`。
    - **通用**：默认比例 16:9，duration 直接传；**必须**把输入消息中的 `storyboardItemId` 原样传入，视频完成后平台会自动回填到该分镜镜头。`generate_video` 为**异步提交**：立即返回 `{status:"submitted", taskId}`，视频在后台生成（ComfyUI 串行处理，单个可能数十分钟）。**不要等待、不要轮询、不要重复提交**。提交后结束本镜头处理，最终回复中汇总已提交的镜头数，并提示用户到「生成记录」查看/获取视频。
+
+### 一镜到底衔接规则
+- 镜头要求**一镜到底/连续镜头**（如 `custom_data.oneShot` 为 true、或镜头描述强调"连续/不切镜/一镜到底"）时：
+  - **本镜头首帧必须使用上一镜头的 `lastFrameImageUrl`**（前后镜头上下文已提供），保证画面无缝衔接。
+  - 若上一镜头还没有尾帧，则用目标镜头自身首帧，并在 prompt 中说明从上一镜结尾状态接续。
+  - 运镜/动作描述要延续上一镜的结束状态（人物位置、朝向、光线方向一致）。
 
 ## 2. 参考图与对白引用规则
 
@@ -62,13 +77,14 @@
   - **运镜**：推 → 镜头推近 | 拉 → 镜头拉远 | 摇 → 水平摇移 | 移 → 平移跟随 | 跟 → 跟随主体 | 升 → 镜头升起 | 降 → 镜头降落 | 环绕 → 环绕旋转 | 甩 → 快速甩动 | 固定/空/不动 → 固定镜头
   - **景别**：远景 → 大全景 | 全景 → 全景画面 | 中景 → 中景呈现 | 近景 → 近景展示 | 特写 → 极近特写
 
-### C. 参考 + 音色模式（ref2v）提示词结构
-适用于「多图参考 + 音色固定」的模型/工作流：
+### C. 参考 / 音色 / 全锁模式提示词结构
+适用于「多图参考 + 音色」以及「首尾帧 + 参考 + 音色」的模型/工作流：
 1. **参考图声明**：开头按序声明每张图的身份，如 `<Picture 1>` 是 X（角色/物品/场景），要求保持其脸、发型、服装与参考图一致。角色资产为**三视图**时，明确以三视图锁定正面/侧面/背面的完整外观。
 2. **音色声明**：声明每个音频属于哪个角色，如 `<Audio 1>` 是 X 的声音参考，X 使用音频 1 的声音感觉。
 3. **画面与动作**：按镜头内容描述动作、运镜、环境、光线；出现的人物/物品与参考图一致，不新增人物。
 4. **对白与口型**：对白按 §2.B 规则写入（`<d>[lang]` 标签），并写明「口型与对白同步」。
 5. **环境音**：末尾写明环境音（风声、脚步、衣料摩擦等），以及对白/音乐的有无。
+6. **全锁模式（首尾帧 + 参考 + 音色）补充**：开头额外声明首尾帧语义（`<Picture 1>` 是视频首帧保持开场构图，`<Picture 2>` 是尾帧保持结束构图），prompt 必须描述从首帧过渡到尾帧的动作/情绪/构图变化，并保持角色与参考图一致、音色与参考音频一致。
 
 ## 4. 示例
 
