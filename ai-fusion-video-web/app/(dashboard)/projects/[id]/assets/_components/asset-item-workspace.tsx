@@ -12,9 +12,11 @@ import {
   X,
 } from "lucide-react";
 import type { AssetItem } from "@/lib/api/asset";
+import { assetApi } from "@/lib/api/asset";
 import { resolveMediaUrl } from "@/lib/api/client";
 import { uploadFile } from "@/lib/api/storage";
 import { getApiErrorMessage } from "@/lib/api/api-error";
+import { toastApiError } from "@/lib/api/toast-api-error";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SafeImage } from "@/components/ui/safe-image";
@@ -66,6 +68,55 @@ export function AssetItemWorkspace({
   const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // 音色：properties.voice_url（人物资产挂音色，供 ref2v <Audio N> 参考）
+  const [voiceUrl, setVoiceUrl] = useState<string | null>(() => {
+    if (!item?.properties) return null;
+    try {
+      const parsed = item.properties as Record<string, unknown>;
+      return typeof parsed.voice_url === "string" ? parsed.voice_url : null;
+    } catch {
+      return null;
+    }
+  });
+  const [voiceUploading, setVoiceUploading] = useState(false);
+  const voiceInputRef = useRef<HTMLInputElement>(null);
+
+  const updateVoice = async (url: string | null) => {
+    if (!item) return;
+    try {
+      const parsed: Record<string, unknown> = item.properties ? { ...item.properties } : {};
+      if (url) {
+        parsed.voice_url = url;
+      } else {
+        delete parsed.voice_url;
+      }
+      await assetApi.updateItem({ id: item.id, properties: JSON.stringify(parsed) });
+      setVoiceUrl(url);
+    } catch (cause) {
+      toastApiError(cause, "保存音色失败");
+    }
+  };
+
+  const uploadVoice = async (file?: File) => {
+    if (!file || !item || voiceUploading) return;
+    if (!file.type.startsWith("audio/")) {
+      setError("请选择音频文件");
+      return;
+    }
+    setVoiceUploading(true);
+    setError("");
+    try {
+      const url = await uploadFile(file, "assets");
+      await updateVoice(url);
+    } catch (cause) {
+      setError(getApiErrorMessage(cause));
+    } finally {
+      setVoiceUploading(false);
+      if (voiceInputRef.current) {
+        voiceInputRef.current.value = "";
+      }
+    }
+  };
   const appearanceHints = useMemo(
     () => getAppearanceHints(assetType),
     [assetType],
@@ -244,6 +295,61 @@ export function AssetItemWorkspace({
                 : "生成图片"}
           </Button>
         </div>
+
+        {/* 音色（人物资产挂音色，供 ref2v <Audio N> 参考） */}
+        {mode === "edit" && item && (
+          <div className="mx-auto mt-3 w-full max-w-[480px] rounded-xl border border-border/30 bg-background/60 p-2.5">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-medium text-muted-foreground shrink-0">
+                音色
+              </span>
+              <input
+                ref={voiceInputRef}
+                type="file"
+                accept="audio/*"
+                className="hidden"
+                onChange={(event) => void uploadVoice(event.target.files?.[0])}
+              />
+              {voiceUrl ? (
+                <>
+                  <audio
+                    src={resolveMediaUrl(voiceUrl) || undefined}
+                    controls
+                    preload="none"
+                    className="h-8 min-w-0 flex-1"
+                  />
+                  <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    onClick={() => void updateVoice(null)}
+                    aria-label="清除音色"
+                    title="清除音色"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => voiceInputRef.current?.click()}
+                  disabled={voiceUploading}
+                  className="flex-1"
+                >
+                  {voiceUploading ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Upload className="h-3.5 w-3.5" />
+                  )}
+                  上传音色
+                </Button>
+              )}
+            </div>
+            <p className="mt-1.5 text-[10px] text-muted-foreground/60">
+              人物/场景参考音色，分镜生成时作为 &lt;Audio N&gt; 参考传给视频模型。
+            </p>
+          </div>
+        )}
         <input
           ref={inputRef}
           hidden

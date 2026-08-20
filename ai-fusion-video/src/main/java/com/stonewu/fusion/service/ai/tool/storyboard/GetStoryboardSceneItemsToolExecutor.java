@@ -267,12 +267,25 @@ public class GetStoryboardSceneItemsToolExecutor implements ToolExecutor {
      * 构建单个子资产的引用信息
      */
     private JSONObject buildSingleAssetRef(AssetItem assetItem) {
-        return JSONUtil.createObj()
+        JSONObject ref = JSONUtil.createObj()
                 .set("assetItemId", assetItem.getId())
                 .set("assetId", assetItem.getAssetId())
                 .set("name", assetItem.getName())
                 .set("itemType", assetItem.getItemType())
                 .set("imageUrl", assetItem.getImageUrl())
                 .set("thumbnailUrl", assetItem.getThumbnailUrl());
+        // 音色：properties.voice_url（人物资产可挂音色，供 ref2v 模式的 <Audio N> 参考）
+        if (StrUtil.isNotBlank(assetItem.getProperties())) {
+            try {
+                JSONObject props = JSONUtil.parseObj(assetItem.getProperties());
+                String voiceUrl = props.getStr("voice_url");
+                if (StrUtil.isNotBlank(voiceUrl)) {
+                    ref.set("voiceUrl", voiceUrl);
+                }
+            } catch (Exception ignored) {
+                // 非法的 properties 忽略
+            }
+        }
+        return ref;
     }
 }
