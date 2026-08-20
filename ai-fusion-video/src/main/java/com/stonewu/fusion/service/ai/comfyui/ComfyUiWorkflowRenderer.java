@@ -37,6 +37,11 @@ public class ComfyUiWorkflowRenderer {
             if (rawValue == null) {
                 continue;
             }
+            // 索引位无值(如只挂了 1 个音色,而绑定有 2 个位):跳过该绑定,保持工作流默认,而不是报错
+            if (binding.index() != null && rawValue instanceof List<?> indexedList
+                    && (binding.index() < 0 || binding.index() >= indexedList.size())) {
+                continue;
+            }
             Object selectedValue = selectIndexedValue(rawValue, binding);
             JsonNode renderedValue = convertValue(selectedValue, binding);
             ObjectNode node = (ObjectNode) workflow.get(binding.nodeId());
