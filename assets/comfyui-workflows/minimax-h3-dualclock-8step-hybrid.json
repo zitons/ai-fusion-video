@@ -1,0 +1,339 @@
+{
+  "1": {
+    "inputs": {
+      "unet_name": "minimax_h3_fl2va_int8_convrot.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "UNet加载器"
+    }
+  },
+  "2": {
+    "inputs": {
+      "lora_name": "minimax_h3_turbo_4step_ema_comfyui.safetensors",
+      "strength_model": 1,
+      "model": [
+        "17",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderBypassModelOnly",
+    "_meta": {
+      "title": "lora only"
+    }
+  },
+  "3": {
+    "inputs": {
+      "clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+      "type": "minimax",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "加载CLIP"
+    }
+  },
+  "4": {
+    "inputs": {
+      "vae_name": "minimax_h3_video_vae_fp16.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "加载VAE"
+    }
+  },
+  "5": {
+    "inputs": {
+      "vae_name": "minimax_h3_audio_vae_fp32.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "加载VAE"
+    }
+  },
+  "6": {
+    "inputs": {
+      "prompt": "How the reference pictures align with the target video — Picture 1 (from Shot 1) aligns with the 0.00-second mark of the target video; Picture 2 (from Shot 1) aligns with the 10.00-second mark of the target video.\n\nintegrated_multimodal_description: [Shot 1] High-budget 3D Chinese anime CG cinematic film, Unreal Engine 5 real-time rendering, stylized realistic characters, cel-shaded rendering blended with PBR materials, cinematic composition, dramatic volumetric lighting, atmospheric haze and dust particles, cold desaturated blue-gray post-apocalyptic color grading with high-contrast cinematic look, film-level depth of field, 4K, vertical 9:16. The shot opens in the medium near-eye-level composition established by Picture 1: a teenage East Asian boy with short black hair and a clear, resolute face — wearing a worn gray overcoat over a light tactical protective vest, with a tactical waist pouch — sits on the edge of the iron bed beneath the rusted water tower in the gray-white wasteland, while a translucent blue holographic panel floats before him, its cold blue light washing across his tired face. The camera holds a static shot with a slow push-in of small amplitude as three holographic cards rise from the panel one by one, backs facing him, their edges glowing gold, blue and purple respectively. The first card flips over, revealing inside a gold ring a question-mark weapon silhouette with the holographic text \"随机武器【品质未知】\"; the second card flips over, revealing inside a blue ring a beam of light piercing a target bullseye with the text \"所有攻击必定命中敌对目标弱点\"; the third card flips over, revealing inside a purple ring a bulging muscular arm with the text \"力量+50%\". The holographic system's synthetic electronic voice (S1) announces off-screen in a flat machine cadence, <d>[chinese]今日卡牌三选一。卡牌一：随机武器【品质未知】；卡牌二：所有攻击必定命中敌对目标弱点；卡牌三：自身力量属性提升50%。</d> while the boy's lips remain completely closed. His gaze locks onto the blue card, his right hand slowly rises, and his fingertip hovers exactly one inch above the card face, trembling slightly; the camera continues its slow push-in with small amplitude as his expression shifts from hesitation to firm determination, ending in the near-eye-level medium-close composition, hand position and final pose established by Picture 2 at the end of the shot.\n\noverall_soundscape: Low wasteland wind continues throughout, lifting dust and tugging at the boy's coat. Three crisp card-flip whooshes land at an even rhythm while the card rings hum faintly and the iron bed creaks softly beneath him.\n\nnon_diegetic_music: An ethereal electronic texture sustains throughout with no melody; each card flip lands a single bright plucked note. In the final seconds the music thins to a low heartbeat-like pulse beneath the electronic texture.\noverall_soundscape: Rapid footfalls strike concrete in sync with the running rhythm. Wind rushes strongly around the microphone during the jump, with clothing and harness straps fluttering. Shoe soles scrape against the rooftop edge and metal rail, followed by a solid landing impact and the runner's brief exerted breathing.\n\nnon_diegetic_music: Fast electronic breakbeat at approximately  es 140 BPM, driven by tight kick drums, sharp hi-hats, and a pulsing bass synth. The rhythm intensifies during the jump and drops slightly on the final landing.",
+      "width": [
+        "16",
+        0
+      ],
+      "height": [
+        "16",
+        1
+      ],
+      "length": [
+        "15",
+        1
+      ],
+      "task_type": "Hybrid",
+      "audio_mode": "native",
+      "audio_denoise_strength": 1,
+      "add_source_as_reference": false,
+      "prompt_primary_audio_ordinal": 0,
+      "strict_prompt_tags": true,
+      "ref_image_size": "match",
+      "reference_video_policy": "official_2_to_15s",
+      "clip": [
+        "3",
+        0
+      ],
+      "video_vae": [
+        "4",
+        0
+      ],
+      "audio_vae": [
+        "5",
+        0
+      ],
+      "first_frame": [
+        "36",
+        0
+      ],
+      "last_frame": [
+        "37",
+        0
+      ],
+      "ref_images.ref_image_0": [
+        "13",
+        0
+      ],
+      "ref_images.ref_image_1": [
+        "38",
+        0
+      ],
+      "ref_audios.ref_audio_0": [
+        "39",
+        0
+      ],
+      "ref_audios.ref_audio_1": [
+        "40",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3AudioConditioningT8",
+    "_meta": {
+      "title": "MiniMax H3 Audio Conditioning (T8)"
+    }
+  },
+  "7": {
+    "inputs": {
+      "steps": 8,
+      "shift_video": 12,
+      "shift_audio": 3,
+      "sampler_name": "dual_clock_euler",
+      "scheduler": "native_flow",
+      "model": [
+        "2",
+        0
+      ],
+      "av_latent": [
+        "6",
+        1
+      ]
+    },
+    "class_type": "MiniMaxH3DualClockSamplerT8",
+    "_meta": {
+      "title": "STABLE 4 video / 4 audio"
+    }
+  },
+  "8": {
+    "inputs": {
+      "model": [
+        "7",
+        0
+      ],
+      "conditioning": [
+        "6",
+        0
+      ]
+    },
+    "class_type": "BasicGuider",
+    "_meta": {
+      "title": "基本引导器"
+    }
+  },
+  "9": {
+    "inputs": {
+      "noise_seed": 123456789
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "随机噪波"
+    }
+  },
+  "10": {
+    "inputs": {
+      "noise": [
+        "9",
+        0
+      ],
+      "guider": [
+        "8",
+        0
+      ],
+      "sampler": [
+        "7",
+        1
+      ],
+      "sigmas": [
+        "7",
+        2
+      ],
+      "latent_image": [
+        "6",
+        1
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "自定义采样器（高级）"
+    }
+  },
+  "11": {
+    "inputs": {
+      "av_latent": [
+        "10",
+        0
+      ],
+      "video_vae": [
+        "4",
+        0
+      ],
+      "audio_vae": [
+        "5",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3AVDecodeT8",
+    "_meta": {
+      "title": "MiniMax H3 AV Decode (T8)"
+    }
+  },
+  "12": {
+    "inputs": {
+      "frame_rate": 24,
+      "loop_count": 0,
+      "filename_prefix": "MiniMaxH3/stable_4v4a",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "crf": 19,
+      "save_metadata": true,
+      "trim_to_audio": false,
+      "pingpong": false,
+      "save_output": true,
+      "images": [
+        "11",
+        0
+      ],
+      "audio": [
+        "11",
+        1
+      ]
+    },
+    "class_type": "VHS_VideoCombine",
+    "_meta": {
+      "title": "Video Combine 🎥🅥🅗🅢"
+    }
+  },
+  "13": {
+    "inputs": {
+      "image": "62025876e2204cfeb24aad5b7104e51b.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像"
+    }
+  },
+  "14": {
+    "inputs": {
+      "value": 5
+    },
+    "class_type": "PrimitiveFloat",
+    "_meta": {
+      "title": "Float (duration)"
+    }
+  },
+  "15": {
+    "inputs": {
+      "expression": "max(5, round(a * 24)) + (5 - (max(5, round(a * 24)) % 17)) % 17",
+      "values.a": [
+        "14",
+        0
+      ]
+    },
+    "class_type": "ComfyMathExpression",
+    "_meta": {
+      "title": "数学表达式"
+    }
+  },
+  "16": {
+    "inputs": {
+      "aspect_ratio": "9:16 (Portrait Widescreen)",
+      "megapixels": 0.9,
+      "multiple": 32
+    },
+    "class_type": "ResolutionSelector",
+    "_meta": {
+      "title": "分辨率选择器"
+    }
+  },
+  "17": {
+    "inputs": {
+      "model": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3MemoryEfficientSageAttentionPatch",
+    "_meta": {
+      "title": "MiniMax H3 Mem Eff Sage Attention Patch"
+    }
+  },
+  "36": {
+    "inputs": {
+      "image": "dab161b2386f4caab8d6786cc9e462ae.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像"
+    }
+  },
+  "37": {
+    "inputs": {
+      "image": "dab161b2386f4caab8d6786cc9e462ae.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像"
+    }
+  },
+  "38": {
+    "inputs": {
+      "image": "dab161b2386f4caab8d6786cc9e462ae.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像"
+    }
+  },
+  "39": {
+    "inputs": {
+      "audio": "lv_0_20260820161736.mp3"
+    },
+    "class_type": "LoadAudio",
+    "_meta": {
+      "title": "加载音频"
+    }
+  },
+  "40": {
+    "inputs": {
+      "audio": "lv_0_20260820161736.mp3"
+    },
+    "class_type": "LoadAudio",
+    "_meta": {
+      "title": "加载音频"
+    }
+  }
+}
