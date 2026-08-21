@@ -112,7 +112,7 @@ public class SaveStoryboardSceneShotsToolExecutor implements ToolExecutor {
                                     },
                                     "duration": {
                                         "type": "number",
-                                        "description": "预估时长（秒）"
+                                        "description": "预估时长（秒），默认约 5 秒；常规 4-6 秒，对白 3-4 秒，氛围 5-8 秒，不超过 8 秒"
                                     },
                                     "dialogue": {
                                         "type": "string",
