@@ -11,10 +11,13 @@
    - **参考图语义**：`referenceImageUrls` 只用于风格、角色、道具、场景一致性，不承载首帧或尾帧语义。
    - **角色音色**：目标镜头角色资产若带音色音频（voiceUrl/audioUrl），收集为参考音频，并在 prompt 中用 `<Audio N>` 标注对应角色。
 4. **识别对白**：按规则将镜头中的 `dialogue` 转写为对白格式，融入 prompt。
-5. **镜头模式与模型选择**：调用 `get_generation_model_capabilities(modelType=video)` 获取 `videoModels` 清单，**默认选能力最全的全锁模型**（`supportsFirstFrame && supportsLastFrame && supportsReferenceImages && supportsReferenceAudios`，即 `isDefault` 模型），并记录 `modelId`（后续 generate_video **必须**传入）：
-   - **全锁（默认）**：镜头有首尾帧和资产时，**首尾帧 + 参考图 + 音色全部传入**（一镜到底时首帧 = 上一镜尾帧，见衔接规则）。
-   - **材料降级**：全锁模型材料不足时按需降级——只有首尾帧无资产 → 选首尾帧模型（`supportsFirstFrame && supportsLastFrame`）；只有资产无首尾帧 → 选参考模型（`supportsReferenceImages && supportsReferenceAudios`）；两者都没有 → 不生成，告知用户先补资产图或首尾帧。
-   - **显式指定覆盖**：镜头 `custom_data.videoMode=ref2v` → 强制参考模型；`=fl2v` → 强制首尾帧模型。
+5. **镜头模式与模型选择**：调用 `get_generation_model_capabilities(modelType=video)` 获取 `videoModels` 清单，**默认模型优先**并记录 `modelId`（后续 generate_video **必须**传入）：
+   - **优先使用用户设置的默认模型**（`isDefault=true`）：只要默认模型的能力满足镜头所需方向，**必须直接用默认模型，不得换成其他模型**。
+     - 参考方向（参考图+音色）：默认模型 `supportsReferenceImages && supportsReferenceAudios` 即可用。
+     - 首尾帧方向（显式 fl2v）：默认模型 `supportsFirstFrame && supportsLastFrame` 即可用。
+   - **默认模型不满足时才换**：按镜头材料选能力匹配的其他模型（参考方向缺参考图能力 → 换参考模型；首尾帧方向缺帧能力 → 换首尾帧模型）。
+   - **材料兜底**：所选方向材料缺失时降级——参考方向无资产图 → 改首尾帧模型；首尾帧方向无首尾帧 → 改参考模型；两者都没有 → 不生成，告知用户先补资产图或首尾帧。
+   - **显式指定覆盖**：镜头 `custom_data.videoMode=ref2v` → 强制参考模型；`=fl2v` → 强制首尾帧模型（仍以默认模型为准，除非默认不满足）。
    - 对所选模型做参数裁剪：不支持的字段一律不传，禁止对不支持的参数重复重试。
 6. **调用生成（按所选方向适配，异步提交，不等待）**：
    - **全锁（首尾帧 + 参考图 + 音色）**：
