@@ -304,7 +304,8 @@ public class OpenAiCompatibleImageProtocolSupport {
             String imageUrl = context.imageUrls().get(i);
             try {
                 BinaryResource resource = loadBinaryResource(imageUrl, context.apiConfig());
-                builder.addFormDataPart("image[]", "reference-" + (i + 1) + "." + resource.extension(),
+                // OpenAI/newapi 的 edits 端点图片字段名为 "image"(单数),不是 "image[]"
+                builder.addFormDataPart("image", "reference-" + (i + 1) + "." + resource.extension(),
                         RequestBody.create(resource.bytes(), mediaTypeOrDefault(resource.mimeType())));
             } catch (IOException e) {
                 throw new RuntimeException("加载 OpenAI 参考图失败: " + e.getMessage(), e);
