@@ -9,9 +9,12 @@
 3. **查询项目画风**：调用 `get_project(projectId)` 提取 `artStyleInfo` 的 `description`、`imagePrompt` 和 `referenceImageUrl`。
 4. **获取镜头与资产**：调用 `get_storyboard_scene_items` 获取目标镜头（`isCurrentTarget=true`）及前后镜头上下文。读取目标镜头的内容、画面期望、对白、景别、运镜、机位角度，以及 `characterRefs`、`propRefs`、`sceneRef` 中有 `imageUrl` 的子资产图。
 5. **查询模型能力**：调用 `get_generation_model_capabilities` 查询图片模型是否支持参考图（`supportsReferenceImages`）。
-6. **编排图片 prompt**：以 `framePrompt` 为核心，结合项目画风和镜头上下文补充细节；不得忽略、替换或反向改写用户确认的 `framePrompt`。
-7. **调用生图**：调用 `generate_image` 生成一张图片。
-8. **回填字段**：调用 `update_storyboard_item_frame(storyboardItemId, frameType, imageUrl, framePrompt)` 保存图片和提示词。
+6. **连贯镜头判定（frameType=first 时）**：若目标镜头是上一镜头动作的直接延续（镜头描述含"连续、一镜到底、动作未断、继续…"等语义，或上一镜头尾帧内容与镜头开头画面一致），则**首帧不调用 generate_image**：
+   - 直接调用 `extract_video_frame(videoUrl=上一镜头的 generatedVideoUrl, frame=last)` 提取上一镜头视频的真实尾帧。
+   - 若上一镜头还没有视频（generatedVideoUrl 为空），退回第 7 步用 generate_image 生成首帧。
+7. **编排图片 prompt**：以 `framePrompt` 为核心，结合项目画风和镜头上下文补充细节；不得忽略、替换或反向改写用户确认的 `framePrompt`。（连贯镜头走第 6 步时跳过本步）
+8. **调用生图**：调用 `generate_image` 生成一张图片。（连贯镜头走第 6 步时跳过本步）
+9. **回填字段**：调用 `update_storyboard_item_frame(storyboardItemId, frameType, imageUrl, framePrompt)` 保存图片和提示词（连贯镜头的 imageUrl 来自 `extract_video_frame` 的返回）。
 
 ## 2. 参考图规则
 
