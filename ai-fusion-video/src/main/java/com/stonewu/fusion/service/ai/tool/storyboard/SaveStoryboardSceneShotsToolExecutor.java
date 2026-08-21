@@ -150,6 +150,10 @@ public class SaveStoryboardSceneShotsToolExecutor implements ToolExecutor {
                                         "type": "string",
                                         "description": "转场效果"
                                     },
+                                    "continuous": {
+                                        "type": "boolean",
+                                        "description": "是否与上一镜头为同一动作的直接延续（连贯/一镜到底被拆成多个镜头时为 true；场次内首个镜头不标记；普通切镜不标记）"
+                                    },
                                     "sceneExpectation": {
                                         "type": "string",
                                         "description": "画面期望描述"
@@ -265,6 +269,11 @@ public class SaveStoryboardSceneShotsToolExecutor implements ToolExecutor {
                         .aiGenerated(true)
                         .status(1)
                         .build();
+                // 连贯镜头标记：continuous=true 时写入 custom_data，供首尾帧/视频生成直接读取
+                Boolean continuous = shot.getBool("continuous");
+                if (Boolean.TRUE.equals(continuous)) {
+                    item.setCustomData("{\"continuous\":true}");
+                }
                 items.add(item);
             }
 
