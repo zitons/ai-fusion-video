@@ -6,7 +6,7 @@
 
 1. **提取参数**：仅解析输入消息中的 `storyboardItemId` 和 `projectId`（忽略可能出现的 `session_id`，勿向下游传递，勿向用户询问）。
 2. **查询项目画风**：调用 `get_project(projectId)` 提取 `artStyleInfo` 的 `description`（画风描述，空则默认“高质量精细画面”）与 `referenceImageUrl`（风格参考图）。
-3. **获取镜头与资产**：调用 `get_storyboard_scene_items` 获取目标镜头（`isCurrentTarget=true`）及前后镜头上下文。读取目标镜头的 `firstFrameImageUrl` 与 `lastFrameImageUrl`；收集目标镜头的 `characterRefs`、`propRefs` 和 `sceneRef` 中有 `imageUrl` 的子资产图作为参考图；读取目标镜头的 `custom_data.videoMode`（视频模式，缺省 `ref2v`）。
+3. **获取镜头与资产**：调用 `get_storyboard_scene_items` 获取目标镜头（`isCurrentTarget=true`）及前后镜头上下文。读取目标镜头的 `firstFrameImageUrl`、`lastFrameImageUrl`、`transition`（转场效果）与 `custom_data.videoMode`（视频模式，缺省 `ref2v`）；收集目标镜头的 `characterRefs`、`propRefs` 和 `sceneRef` 中有 `imageUrl` 的子资产图作为参考图；读取上一镜头结尾状态（content/画面）用于转场衔接描述。
    - **排序规则**：角色 → 场景（三视图/场景母版优先，锁定完整外观），数量不超过所选模型的 `maxReferenceImages`（Ref2V 工作流为 3，典型配置 2 角色 + 1 场景）。
    - **参考图语义**：`referenceImageUrls` 只用于风格、角色、道具、场景一致性，不承载首帧或尾帧语义。
    - **角色音色**：目标镜头角色资产若带音色音频（voiceUrl/audioUrl），收集为参考音频，并在 prompt 中用 `<Audio N>` 标注对应角色。
@@ -77,6 +77,15 @@
 - **运镜/景别标准转写**：
   - **运镜**：推 → 镜头推近 | 拉 → 镜头拉远 | 摇 → 水平摇移 | 移 → 平移跟随 | 跟 → 跟随主体 | 升 → 镜头升起 | 降 → 镜头降落 | 环绕 → 环绕旋转 | 甩 → 快速甩动 | 固定/空/不动 → 固定镜头
   - **景别**：远景 → 大全景 | 全景 → 全景画面 | 中景 → 中景呈现 | 近景 → 近景展示 | 特写 → 极近特写
+
+### B2. 转场衔接规则（transition 字段 → prompt）
+镜头独立生成，切镜是常态；衔接语义来自分镜的 `transition` 字段，写入 prompt 开场/收尾，**不做帧锁定、不强行连镜**：
+- **transition 为空/硬切（cut/无）**：本镜**独立开场**，不要延续上一镜画面；直接描述本镜起始画面。
+- **叠化/淡化/溶解（dissolve/fade）**：开场描述从上一镜结尾状态自然过渡，如 `开场从上一镜结尾的{上一镜结束状态}叠化进入本镜场景。`
+- **跟移/甩切（whip/pan-follow）**：延续上一镜的运镜方向或动作方向开场。
+- **其他转场（划像/擦除等）**：按转场语义描述开场过渡即可，不锁定上一镜画面。
+- **收尾**：若下一镜与本镜为叠化/软转场，结尾可略留动作余波（半秒）便于过渡；硬切则直接收束。
+- 上一镜头的结尾状态从**前后镜头上下文**的上一镜头 `content`/画面描述中获取；拿不到时不要编造，按独立开场处理。
 
 ### C. 参考 / 音色 / 全锁模式提示词结构
 适用于「多图参考 + 音色」以及「首尾帧 + 参考 + 音色」的模型/工作流。**结构必须按下列顺序固定编写，严禁串序**：
