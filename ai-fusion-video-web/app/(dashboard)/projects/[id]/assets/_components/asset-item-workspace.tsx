@@ -24,8 +24,25 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { getAppearance, getAppearanceHints } from "./asset-types";
 
-interface AssetItemWorkspaceProps {
-  mode: "create" | "edit";
+/** 兼容两种 properties 形态：后端可能返回 JSON 字符串或已解析对象 */
+function parseProperties(raw: string | Record<string, unknown> | null | undefined): Record<string, unknown> {
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (!trimmed) return {};
+    try {
+      const parsed = JSON.parse(trimmed);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  if (raw && typeof raw === "object") {
+    return { ...raw };
+  }
+  return {};
+}
+
+interface AssetItemWorkspaceProps {  mode: "create" | "edit";
   item: AssetItem | null;
   assetType: string;
   saving: boolean;
@@ -72,7 +89,7 @@ export function AssetItemWorkspace({
   const [voiceUrl, setVoiceUrl] = useState<string | null>(() => {
     if (!item?.properties) return null;
     try {
-      const parsed = item.properties as Record<string, unknown>;
+      const parsed = parseProperties(item.properties);
       return typeof parsed.voice_url === "string" ? parsed.voice_url : null;
     } catch {
       return null;
@@ -84,7 +101,7 @@ export function AssetItemWorkspace({
   const updateVoice = async (url: string | null) => {
     if (!item) return;
     try {
-      const parsed: Record<string, unknown> = item.properties ? { ...item.properties } : {};
+      const parsed = parseProperties(item.properties);
       if (url) {
         parsed.voice_url = url;
       } else {
