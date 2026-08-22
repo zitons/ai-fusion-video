@@ -591,6 +591,7 @@ public class AiAgentRegistry {
                                                                                 调用时 message 必须包含以下信息（每行一个键值对）：
                                                                                 - storyboardItemId: 分镜条目ID（数字，必传）
                                                                                 - projectId: 项目ID（数字，必传）
+                                                                                - promptOnly: true（可选）—— 只生成视频提示词并保存到分镜条目，不调用 generate_video；不传或传 false 则正常生成视频
                                                                                 - 不要额外传 session_id，框架会自动维护会话
 
                                                                                 message 格式示例：
