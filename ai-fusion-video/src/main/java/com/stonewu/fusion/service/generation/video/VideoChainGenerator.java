@@ -36,6 +36,7 @@ import java.util.List;
 public class VideoChainGenerator {
 
     private final StoryboardItemMapper storyboardItemMapper;
+    private final com.stonewu.fusion.mapper.storyboard.StoryboardSceneMapper storyboardSceneMapper;
     private final AssetItemMapper assetItemMapper;
     private final VideoTaskMapper videoTaskMapper;
     private final AiModelService aiModelService;
@@ -88,15 +89,10 @@ public class VideoChainGenerator {
     private void applyPreviousShotFrame(VideoChain chain, List<Long> itemIds) {
         try {
             StoryboardItem first = storyboardItemMapper.selectById(itemIds.get(0));
-            if (first == null || first.getStoryboardEpisodeId() == null
-                    || first.getSortOrder() == null) {
+            if (first == null || first.getStoryboardEpisodeId() == null) {
                 return;
             }
-            StoryboardItem prev = storyboardItemMapper.selectOne(new LambdaQueryWrapper<StoryboardItem>()
-                    .eq(StoryboardItem::getStoryboardEpisodeId, first.getStoryboardEpisodeId())
-                    .lt(StoryboardItem::getSortOrder, first.getSortOrder())
-                    .orderByDesc(StoryboardItem::getSortOrder)
-                    .last("LIMIT 1"));
+            StoryboardItem prev = findPreviousShot(first);
             if (prev == null || StrUtil.isBlank(prev.getGeneratedVideoUrl())) {
                 return;
             }
@@ -125,6 +121,41 @@ public class VideoChainGenerator {
         } catch (Exception e) {
             log.warn("[VideoChain] 链首镜头前视频尾帧参考失败(忽略): {}", e.getMessage());
         }
+    }
+
+    /** 场次感知的前一镜头查找：同场次取 sort_order-1；场次首镜取上一场次最后一镜。 */
+    private StoryboardItem findPreviousShot(StoryboardItem first) {
+        if (first.getStoryboardSceneId() == null || first.getSortOrder() == null) {
+            return null;
+        }
+        // 1) 同场次内, sort_order 更小的最近一个
+        StoryboardItem sameScene = storyboardItemMapper.selectOne(new LambdaQueryWrapper<StoryboardItem>()
+                .eq(StoryboardItem::getStoryboardSceneId, first.getStoryboardSceneId())
+                .lt(StoryboardItem::getSortOrder, first.getSortOrder())
+                .orderByDesc(StoryboardItem::getSortOrder)
+                .last("LIMIT 1"));
+        if (sameScene != null) {
+            return sameScene;
+        }
+        // 2) 场次首镜:取上一场次(同分镜集内 scene.sort_order 更小的最近一个)的最后一镜
+        com.stonewu.fusion.entity.storyboard.StoryboardScene currentScene =
+                storyboardSceneMapper.selectById(first.getStoryboardSceneId());
+        if (currentScene == null || currentScene.getSortOrder() == null) {
+            return null;
+        }
+        com.stonewu.fusion.entity.storyboard.StoryboardScene prevScene =
+                storyboardSceneMapper.selectOne(new LambdaQueryWrapper<com.stonewu.fusion.entity.storyboard.StoryboardScene>()
+                        .eq(com.stonewu.fusion.entity.storyboard.StoryboardScene::getEpisodeId, first.getStoryboardEpisodeId())
+                        .lt(com.stonewu.fusion.entity.storyboard.StoryboardScene::getSortOrder, currentScene.getSortOrder())
+                        .orderByDesc(com.stonewu.fusion.entity.storyboard.StoryboardScene::getSortOrder)
+                        .last("LIMIT 1"));
+        if (prevScene == null) {
+            return null;
+        }
+        return storyboardItemMapper.selectOne(new LambdaQueryWrapper<StoryboardItem>()
+                .eq(StoryboardItem::getStoryboardSceneId, prevScene.getId())
+                .orderByDesc(StoryboardItem::getSortOrder)
+                .last("LIMIT 1"));
     }
 
     private void submitStep(Long chainId, int seq) {
