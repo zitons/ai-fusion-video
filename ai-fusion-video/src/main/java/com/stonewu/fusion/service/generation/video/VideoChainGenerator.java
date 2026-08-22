@@ -78,8 +78,53 @@ public class VideoChainGenerator {
             step.setRetryCount(0);
             stepMapper.insert(step);
         }
+        // 链首镜头:若前一个镜头(同分镜集内 sort_order 更小的最近一个)已有生成视频,
+        // 提取其真实尾帧作为链首参考图(覆盖"1-2 已生成,再批量 3-10"的衔接场景)
+        applyPreviousShotFrame(chain, itemIds);
         submitStep(chain.getId(), 0);
         return chain.getId();
+    }
+
+    private void applyPreviousShotFrame(VideoChain chain, List<Long> itemIds) {
+        try {
+            StoryboardItem first = storyboardItemMapper.selectById(itemIds.get(0));
+            if (first == null || first.getStoryboardEpisodeId() == null
+                    || first.getSortOrder() == null) {
+                return;
+            }
+            StoryboardItem prev = storyboardItemMapper.selectOne(new LambdaQueryWrapper<StoryboardItem>()
+                    .eq(StoryboardItem::getStoryboardEpisodeId, first.getStoryboardEpisodeId())
+                    .lt(StoryboardItem::getSortOrder, first.getSortOrder())
+                    .orderByDesc(StoryboardItem::getSortOrder)
+                    .last("LIMIT 1"));
+            if (prev == null || StrUtil.isBlank(prev.getGeneratedVideoUrl())) {
+                return;
+            }
+            VideoFrameExtractor.ExtractedFrames frames =
+                    videoFrameExtractor.extract(prev.getGeneratedVideoUrl(), false, true);
+            if (StrUtil.isBlank(frames.lastFrameUrl())) {
+                return;
+            }
+            VideoChainStep step0 = loadStep(chain.getId(), 0);
+            if (step0 == null) {
+                return;
+            }
+            List<String> refs = parseStringList(step0.getReferenceImageUrls());
+            refs.add(frames.lastFrameUrl());
+            step0.setReferenceImageUrls(toJson(refs));
+            String prompt = step0.getPrompt();
+            if (StrUtil.isNotBlank(prompt) && !prompt.contains("上一镜头结束画面参考")) {
+                int pictureNumber = refs.size();
+                step0.setPrompt(prompt + "\n图片 " + pictureNumber
+                        + "（<Picture " + pictureNumber + ">）是上一镜头结束画面参考，"
+                        + "只用于场景、光线与人物位置的延续参考，不是首帧，不锁定构图。");
+            }
+            stepMapper.updateById(step0);
+            log.info("[VideoChain] 链首镜头使用前一个已生成视频的尾帧作参考: chain={}, prevItem={}",
+                    chain.getId(), prev.getId());
+        } catch (Exception e) {
+            log.warn("[VideoChain] 链首镜头前视频尾帧参考失败(忽略): {}", e.getMessage());
+        }
     }
 
     private void submitStep(Long chainId, int seq) {
