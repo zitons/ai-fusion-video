@@ -48,6 +48,7 @@ public class VideoGenerationConsumer {
 
     private final RedisTaskQueue taskQueue;
     private final VideoGenerationService videoGenerationService;
+    private final com.stonewu.fusion.mapper.generation.VideoTaskMapper videoTaskMapper;
     private final AiModelService aiModelService;
     private final ApiConfigService apiConfigService;
     private final GenerationModelCapabilityService generationModelCapabilityService;
@@ -200,6 +201,26 @@ public class VideoGenerationConsumer {
     public void consume() {
         for (String queueName : collectQueueNamesToConsume()) {
             drainQueue(queueName);
+        }
+    }
+
+    /** 运行中超时看门狗：status=1 超过 30 分钟视为僵尸（轮询中断/后端重启），
+     *  标记失败(瞬时类,可找回),释放并发位,避免堵死整个队列。 */
+    @Scheduled(fixedDelay = 60000)
+    public void watchdogStaleRunning() {
+        try {
+            List<VideoTask> stale = videoTaskMapper.selectList(
+                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<VideoTask>()
+                            .eq(VideoTask::getStatus, 1)
+                            .lt(VideoTask::getUpdateTime, java.time.LocalDateTime.now().minusMinutes(30))
+                            .last("LIMIT 20"));
+            for (VideoTask t : stale) {
+                log.warn("[VideoConsumer] 僵尸运行任务标记失败(可找回): taskId={}, id={}, updated={}",
+                        t.getTaskId(), t.getId(), t.getUpdateTime());
+                videoGenerationService.updateStatus(t.getId(), 3, "运行超时(轮询中断),可找回");
+            }
+        } catch (Exception e) {
+            log.error("[VideoConsumer] 看门狗执行失败", e);
         }
     }
 
