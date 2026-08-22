@@ -168,6 +168,14 @@ public class VideoChainGenerator {
             List<String> refs = parseStringList(next.getReferenceImageUrls());
             refs.add(frames.lastFrameUrl());
             next.setReferenceImageUrls(toJson(refs));
+            // 提示词同步追加声明：上一镜结束画面作为参考图（不是首帧）
+            String prompt = next.getPrompt();
+            if (StrUtil.isNotBlank(prompt) && !prompt.contains("上一镜头结束画面参考")) {
+                int pictureNumber = refs.size();
+                next.setPrompt(prompt + "\n图片 " + pictureNumber
+                        + "（<Picture " + pictureNumber + ">）是上一镜头结束画面参考，"
+                        + "只用于场景、光线与人物位置的延续参考，不是首帧，不锁定构图。");
+            }
             next.setStatus(0);
             stepMapper.updateById(next);
             submitStep(next.getChainId(), next.getSeq());
