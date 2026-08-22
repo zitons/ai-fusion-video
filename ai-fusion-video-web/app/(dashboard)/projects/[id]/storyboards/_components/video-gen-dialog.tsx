@@ -47,7 +47,11 @@ export function VideoGenDialog({
   };
 
   const handleConfirm = (promptOnly?: boolean) => {
-    onConfirm(Array.from(selected), promptOnly);
+    // 按分镜顺序排序后传(而不是勾选顺序),保证链的生成顺序正确、衔接准确
+    const ordered = items
+      .filter((item) => selected.has(item.id))
+      .map((item) => item.id);
+    onConfirm(ordered, promptOnly);
     onClose();
   };
 
