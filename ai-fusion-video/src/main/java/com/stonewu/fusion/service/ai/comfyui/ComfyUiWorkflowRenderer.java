@@ -61,6 +61,17 @@ public class ComfyUiWorkflowRenderer {
             }
             nodeInputs.set(binding.inputName(), renderedValue);
         }
+        // 随机化 RandomNoise 种子：工作流里常写死固定 seed（如 123456789），
+        // 导致同输入生成结果雷同。每次渲染换一个随机种子保证每次生成不同。
+        workflow.fields().forEachRemaining(entry -> {
+            JsonNode node = entry.getValue();
+            if (node.isObject() && "RandomNoise".equals(node.path("class_type").asText())
+                    && node.path("inputs").isObject()
+                    && node.path("inputs").has("noise_seed")) {
+                ((ObjectNode) node.get("inputs"))
+                        .put("noise_seed", ThreadLocalRandom.current().nextLong(1L, Long.MAX_VALUE));
+            }
+        });
         return workflow;
     }
 
