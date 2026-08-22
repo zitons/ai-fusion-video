@@ -719,31 +719,18 @@ function SceneAssetPanel({
       return;
     }
     if (selectedItemIds.length >= 2) {
-      // 批量生视频：两步 —— ① 先生成提示词 ② 提示词完成后自动调串行链（上一镜真实尾帧作下一镜参考图）
-      addPipeline({
-        label: `批量生成视频提示词 (${selectedItemIds.length} 个镜头)`,
-        projectId,
-        request: {
-          agentType: "storyboard_video_gen",
-          toolExecutionMode: "FULL_ACCESS",
-          projectId,
-          context: {
-            selectedStoryboardItemIds: selectedItemIds,
-            storyboardId: storyboard.id,
-            promptOnly: true,
-          },
-        },
-        onComplete: async () => {
-          try {
-            const chainId = await videoChainApi.create({ itemIds: selectedItemIds });
-            toast.success("串行生成链已启动", {
-              description: `共 ${selectedItemIds.length} 个镜头，一个视频一个视频生成，上一镜完成自动提取真实尾帧作为下一镜参考图（链 #${chainId}）。`,
-            });
-          } catch (err) {
-            toastApiError(err, "启动串行生成链失败");
-          }
-        },
-      });
+      // 批量生视频：直接用已有 videoPrompt 调串行链（不重复生成提示词）。
+      // 如果镜头缺提示词，链接口会报错提示，先点「批量生成视频提示词」补全。
+      void (async () => {
+        try {
+          const chainId = await videoChainApi.create({ itemIds: selectedItemIds });
+          toast.success("串行生成链已启动", {
+            description: `共 ${selectedItemIds.length} 个镜头，一个视频一个视频生成，上一镜完成自动提取真实尾帧作为下一镜参考图（链 #${chainId}）。`,
+          });
+        } catch (err) {
+          toastApiError(err, "启动串行生成链失败");
+        }
+      })();
       setNotificationOpen(true);
       return;
     }
