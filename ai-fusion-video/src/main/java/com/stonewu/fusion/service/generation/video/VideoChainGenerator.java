@@ -154,6 +154,8 @@ public class VideoChainGenerator {
                 VideoChainStep firstPending = stepMapper.selectOne(new LambdaQueryWrapper<VideoChainStep>()
                         .eq(VideoChainStep::getChainId, chain.getId())
                         .eq(VideoChainStep::getStatus, 0)
+                        .and(w -> w.isNull(VideoChainStep::getRetryAt)
+                                .or().le(VideoChainStep::getRetryAt, new java.util.Date()))
                         .orderByAsc(VideoChainStep::getSeq)
                         .last("LIMIT 1"));
                 if (firstPending != null) {
@@ -214,12 +216,13 @@ public class VideoChainGenerator {
         } else if (task.getStatus() != null && task.getStatus() == 3) {
             String err = StrUtil.blankToDefault(task.getErrorMsg(), "任务失败");
             if (isTransientError(err) && step.getRetryCount() != null && step.getRetryCount() < 3) {
-                // 瞬时失败(网关瞬断/轮询中断/超时):重置为待提交,由自愈驱动重试
-                log.warn("[VideoChain] 瞬时失败,重试: chain={}, seq={}, err={}", step.getChainId(), step.getSeq(), err);
+                // 瞬时失败(网关瞬断/轮询中断/超时):5 分钟后重试,避免连发重复生成同一视频
+                log.warn("[VideoChain] 瞬时失败,5分钟后重试: chain={}, seq={}, err={}", step.getChainId(), step.getSeq(), err);
                 step.setStatus(0);
                 step.setRetryCount(step.getRetryCount() + 1);
                 step.setErrorMsg(null);
                 step.setTaskId(null);
+                step.setRetryAt(new java.util.Date(System.currentTimeMillis() + 5 * 60 * 1000L));
                 stepMapper.updateById(step);
                 return;
             }
@@ -394,6 +397,7 @@ public class VideoChainGenerator {
         private Integer status;
         private String errorMsg;
         private Integer retryCount;
+        private java.util.Date retryAt;
 
         public Long getId() { return id; }
         public void setId(Long id) { this.id = id; }
@@ -419,6 +423,8 @@ public class VideoChainGenerator {
         public void setErrorMsg(String errorMsg) { this.errorMsg = errorMsg; }
         public Integer getRetryCount() { return retryCount; }
         public void setRetryCount(Integer retryCount) { this.retryCount = retryCount; }
+        public java.util.Date getRetryAt() { return retryAt; }
+        public void setRetryAt(java.util.Date retryAt) { this.retryAt = retryAt; }
     }
 
     @Mapper
