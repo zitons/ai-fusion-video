@@ -138,6 +138,30 @@ public class VideoChainGenerator {
                 failChain(step.getChainId(), e.getMessage());
             }
         }
+        // 自愈：运行中的链若没有活跃步骤（如某步骤提交失败被重置），提交第一个待提交步骤
+        try {
+            List<VideoChain> running = chainMapper.selectList(new LambdaQueryWrapper<VideoChain>()
+                    .eq(VideoChain::getStatus, 0)
+                    .last("LIMIT 10"));
+            for (VideoChain chain : running) {
+                Long activeCount = stepMapper.selectCount(new LambdaQueryWrapper<VideoChainStep>()
+                        .eq(VideoChainStep::getChainId, chain.getId())
+                        .eq(VideoChainStep::getStatus, 1));
+                if (activeCount != null && activeCount > 0) {
+                    continue;
+                }
+                VideoChainStep firstPending = stepMapper.selectOne(new LambdaQueryWrapper<VideoChainStep>()
+                        .eq(VideoChainStep::getChainId, chain.getId())
+                        .eq(VideoChainStep::getStatus, 0)
+                        .orderByAsc(VideoChainStep::getSeq)
+                        .last("LIMIT 1"));
+                if (firstPending != null) {
+                    submitStep(chain.getId(), firstPending.getSeq());
+                }
+            }
+        } catch (Exception e) {
+            log.error("[VideoChain] 自愈驱动失败", e);
+        }
     }
 
     private void advance(VideoChainStep step) {
