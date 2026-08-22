@@ -192,7 +192,7 @@ public class VideoChainGenerator {
                 failChain(step.getChainId(), "镜头无视频回填: seq=" + (step.getSeq() + 1));
                 return;
             }
-            // 提取上一镜真实尾帧 -> 追加为下一镜参考图
+            // 提取上一镜真实尾帧 -> 追加为下一镜参考图(所有镜头都给,衔接画面状态)
             VideoFrameExtractor.ExtractedFrames frames = videoFrameExtractor.extract(videoUrl, false, true);
             if (StrUtil.isBlank(frames.lastFrameUrl())) {
                 log.warn("[VideoChain] 尾帧提取失败,链中断: chain={}, seq={}, video={}", step.getChainId(), step.getSeq(), videoUrl);
