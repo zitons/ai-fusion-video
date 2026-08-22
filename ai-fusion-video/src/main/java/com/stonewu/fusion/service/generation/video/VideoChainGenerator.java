@@ -74,6 +74,7 @@ public class VideoChainGenerator {
             step.setReferenceAudioUrls(toJson(collectReferenceAudios(item)));
             step.setDuration(item.getDuration() != null ? item.getDuration().intValue() : 5);
             step.setStatus(0);
+            step.setRetryCount(0);
             stepMapper.insert(step);
         }
         submitStep(chain.getId(), 0);
@@ -211,9 +212,30 @@ public class VideoChainGenerator {
             stepMapper.updateById(next);
             submitStep(next.getChainId(), next.getSeq());
         } else if (task.getStatus() != null && task.getStatus() == 3) {
-            failStep(step, StrUtil.blankToDefault(task.getErrorMsg(), "任务失败"));
-            failChain(step.getChainId(), "任务失败: " + StrUtil.blankToDefault(task.getErrorMsg(), "未知"));
+            String err = StrUtil.blankToDefault(task.getErrorMsg(), "任务失败");
+            if (isTransientError(err) && step.getRetryCount() != null && step.getRetryCount() < 3) {
+                // 瞬时失败(网关瞬断/轮询中断/超时):重置为待提交,由自愈驱动重试
+                log.warn("[VideoChain] 瞬时失败,重试: chain={}, seq={}, err={}", step.getChainId(), step.getSeq(), err);
+                step.setStatus(0);
+                step.setRetryCount(step.getRetryCount() + 1);
+                step.setErrorMsg(null);
+                step.setTaskId(null);
+                stepMapper.updateById(step);
+                return;
+            }
+            failStep(step, err);
+            failChain(step.getChainId(), "任务失败: " + err);
         }
+    }
+
+    private boolean isTransientError(String message) {
+        if (StrUtil.isBlank(message)) {
+            return true;
+        }
+        return message.contains("连接") || message.contains("connect")
+                || message.contains("超时") || message.contains("timeout")
+                || message.contains("轮询") || message.contains("执行失败")
+                || message.contains("服务连接失败");
     }
 
     // ---- helpers ----
@@ -371,6 +393,7 @@ public class VideoChainGenerator {
         private Long taskId;
         private Integer status;
         private String errorMsg;
+        private Integer retryCount;
 
         public Long getId() { return id; }
         public void setId(Long id) { this.id = id; }
@@ -394,6 +417,8 @@ public class VideoChainGenerator {
         public void setStatus(Integer status) { this.status = status; }
         public String getErrorMsg() { return errorMsg; }
         public void setErrorMsg(String errorMsg) { this.errorMsg = errorMsg; }
+        public Integer getRetryCount() { return retryCount; }
+        public void setRetryCount(Integer retryCount) { this.retryCount = retryCount; }
     }
 
     @Mapper
