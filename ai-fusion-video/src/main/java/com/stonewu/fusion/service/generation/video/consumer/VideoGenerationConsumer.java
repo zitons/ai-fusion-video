@@ -177,7 +177,9 @@ public class VideoGenerationConsumer {
             cancelled |= strategy.cancel(platformTaskId, task);
         }
         if (!cancelled) {
-            throw new BusinessException(400, "当前视频任务尚不能取消或远端任务已结束");
+            // 远端任务已结束或无法取消：仍按用户意图在本地标记取消（收尾），不再报错
+            log.info("[VideoConsumer] 远端任务已结束，按用户意图本地标记取消: taskId={}, platformTaskIds={}",
+                    taskId, platformTaskIds);
         }
         markCancelled(task);
         return true;
