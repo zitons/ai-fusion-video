@@ -3,6 +3,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { toastApiError } from "@/lib/api/toast-api-error";
+import { toast } from "sonner";
+import { videoChainApi } from "@/lib/api/video-chain";
 import {
   Info,
   Camera,
@@ -694,10 +696,60 @@ function SceneAssetPanel({
 
   /** 批量生视频确认 */
   const handleVideoGenConfirm = (selectedItemIds: number[], promptOnly?: boolean) => {
+    if (promptOnly) {
+      // 仅生成提示词模式：照旧走 agent
+      addPipeline({
+        label: `批量生成视频提示词 (${selectedItemIds.length} 个镜头)`,
+        projectId,
+        request: {
+          agentType: "storyboard_video_gen",
+          toolExecutionMode: "FULL_ACCESS",
+          projectId,
+          context: {
+            selectedStoryboardItemIds: selectedItemIds,
+            storyboardId: storyboard.id,
+            promptOnly: true,
+          },
+        },
+        onComplete: () => {
+          // 视频生成完成后可能需要刷新分镜数据
+        },
+      });
+      setNotificationOpen(true);
+      return;
+    }
+    if (selectedItemIds.length >= 2) {
+      // 批量生视频：两步 —— ① 先生成提示词 ② 提示词完成后自动调串行链（上一镜真实尾帧作下一镜参考图）
+      addPipeline({
+        label: `批量生成视频提示词 (${selectedItemIds.length} 个镜头)`,
+        projectId,
+        request: {
+          agentType: "storyboard_video_gen",
+          toolExecutionMode: "FULL_ACCESS",
+          projectId,
+          context: {
+            selectedStoryboardItemIds: selectedItemIds,
+            storyboardId: storyboard.id,
+            promptOnly: true,
+          },
+        },
+        onComplete: async () => {
+          try {
+            const chainId = await videoChainApi.create({ itemIds: selectedItemIds });
+            toast.success("串行生成链已启动", {
+              description: `共 ${selectedItemIds.length} 个镜头，一个视频一个视频生成，上一镜完成自动提取真实尾帧作为下一镜参考图（链 #${chainId}）。`,
+            });
+          } catch (err) {
+            toastApiError(err, "启动串行生成链失败");
+          }
+        },
+      });
+      setNotificationOpen(true);
+      return;
+    }
+    // 单镜生成：照旧走 agent
     addPipeline({
-      label: promptOnly
-        ? `批量生成视频提示词 (${selectedItemIds.length} 个镜头)`
-        : `批量生视频 (${selectedItemIds.length} 个镜头)`,
+      label: `批量生视频 (${selectedItemIds.length} 个镜头)`,
       projectId,
       request: {
         agentType: "storyboard_video_gen",
@@ -706,7 +758,7 @@ function SceneAssetPanel({
         context: {
           selectedStoryboardItemIds: selectedItemIds,
           storyboardId: storyboard.id,
-          promptOnly: promptOnly || false,
+          promptOnly: false,
         },
       },
       onComplete: () => {

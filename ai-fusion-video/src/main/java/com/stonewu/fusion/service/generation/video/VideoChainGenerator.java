@@ -62,6 +62,9 @@ public class VideoChainGenerator {
             if (item == null) {
                 throw new IllegalArgumentException("分镜镜头不存在: " + itemIds.get(i));
             }
+            if (StrUtil.isBlank(item.getVideoPrompt())) {
+                throw new IllegalArgumentException("镜头 " + item.getId() + " 缺少 videoPrompt，请先为所有镜头生成视频提示词（批量提示词模式）再发起链生成");
+            }
             VideoChainStep step = new VideoChainStep();
             step.setChainId(chain.getId());
             step.setSeq(i);
@@ -107,12 +110,16 @@ public class VideoChainGenerator {
             failChain(chainId, "任务校验失败: " + e.getMessage());
             return;
         }
-        String taskId = videoGenerationConsumer.submitTask(task);
-        step.setTaskId(parseTaskId(taskId));
+        String taskUuid = videoGenerationConsumer.submitTask(task);
+        // submitTask 返回 task_id(UUID);链用数据库自增 id 关联,反查一次
+        VideoTask created = videoTaskMapper.selectOne(new LambdaQueryWrapper<VideoTask>()
+                .eq(VideoTask::getTaskId, taskUuid)
+                .last("LIMIT 1"));
+        step.setTaskId(created != null ? created.getId() : null);
         step.setStatus(1);
         stepMapper.updateById(step);
-        log.info("[VideoChain] 已提交链内镜头: chain={}, seq={}/{}, item={}, taskId={}",
-                chainId, seq + 1, chain.getTotalSteps(), step.getStoryboardItemId(), taskId);
+        log.info("[VideoChain] 已提交链内镜头: chain={}, seq={}/{}, item={}, taskUuid={}, taskId={}",
+                chainId, seq + 1, chain.getTotalSteps(), step.getStoryboardItemId(), taskUuid, step.getTaskId());
     }
 
     /** 轮询：上一任务完成 -> 提取尾帧 -> 追加为下一镜参考图 -> 提交下一镜。串行。 */
