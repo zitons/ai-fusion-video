@@ -41,6 +41,7 @@ public class VideoChainGenerator {
     private final AiModelService aiModelService;
     private final VideoGenerationConsumer videoGenerationConsumer;
     private final VideoFrameExtractor videoFrameExtractor;
+    private final com.stonewu.fusion.service.generation.video.strategy.comfyui.ComfyUiVideoStrategy comfyUiVideoStrategy;
     private final GenerationModelCapabilityService generationModelCapabilityService;
     private final VideoChainMapper chainMapper;
     private final VideoChainStepMapper stepMapper;
@@ -215,6 +216,17 @@ public class VideoChainGenerator {
             submitStep(next.getChainId(), next.getSeq());
         } else if (task.getStatus() != null && task.getStatus() == 3) {
             String err = StrUtil.blankToDefault(task.getErrorMsg(), "任务失败");
+            // 先尝试"查询找回"(不重新生成)：任务可能已在 ComfyUI 出片，只是网络查询失败
+            try {
+                boolean recovered = comfyUiVideoStrategy.recover(task);
+                if (recovered) {
+                    log.info("[VideoChain] 失败任务查询找回成功(不重生成): chain={}, seq={}, taskId={}",
+                            step.getChainId(), step.getSeq(), task.getId());
+                    advance(step);
+                    return;
+                }
+            } catch (Exception ignored) {
+            }
             if (isTransientError(err) && step.getRetryCount() != null && step.getRetryCount() < 3) {
                 // 瞬时失败(网关瞬断/轮询中断/超时):5 分钟后重试,避免连发重复生成同一视频
                 log.warn("[VideoChain] 瞬时失败,5分钟后重试: chain={}, seq={}, err={}", step.getChainId(), step.getSeq(), err);

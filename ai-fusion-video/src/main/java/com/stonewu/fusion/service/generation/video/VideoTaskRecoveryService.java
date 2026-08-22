@@ -66,6 +66,10 @@ public class VideoTaskRecoveryService {
         }
         return message.contains("连接") || message.contains("connect")
                 || message.contains("超时") || message.contains("timeout")
-                || message.contains("轮询") || message.contains("执行失败");
+                || message.contains("轮询") || message.contains("执行失败")
+                || message.contains("Name or service not known")
+                || message.contains("unknown host")
+                || message.contains("解析失败")
+                || message.contains("DNS");
     }
 }
